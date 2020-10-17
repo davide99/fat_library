@@ -3,7 +3,6 @@
 #include "fat_utils.h"
 #include <stdio.h>
 
-
 //Private functions
 static int get_partition_info(struct fat_drive *fat_drive);
 static int read_BPB(struct fat_drive *fat_drive);
@@ -161,6 +160,34 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 	}
 }
 
+void fat_save_file(struct fat_drive *fat_drive, uint32_t cluster, uint32_t bytes) {
+	FILE *f;
+	uint8_t *data;
+	uint64_t address;
+	uint32_t cluster_size_bytes;
+
+	cluster_size_bytes = 1u << (uint32_t) (fat_drive->log_sectors_per_cluster + fat_drive->log_bytes_per_sector);
+	f = fopen("../out.txt", "wb");
+
+	do {
+		address = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
+
+		if (bytes >= cluster_size_bytes) {
+			data = fat_drive->read_bytes(address, cluster_size_bytes);
+			fwrite(data, cluster_size_bytes, 1, f);
+			bytes -= cluster_size_bytes;
+		} else {
+			data = fat_drive->read_bytes(address, bytes);
+			fwrite(data, bytes, 1, f);
+			bytes = 0;
+		}
+
+		cluster = find_next_cluster(*fat_drive, cluster);
+	} while (!is_eof(*fat_drive, cluster) && bytes!=0);
+
+	fclose(f);
+}
+
 static inline uint32_t first_sector_of_cluster(struct fat_drive *fat_drive, uint32_t cluster) {
 	return ((cluster - 2) << fat_drive->log_sectors_per_cluster) + fat_drive->first_data_sector;
 }
@@ -174,10 +201,9 @@ static uint32_t find_next_cluster(struct fat_drive fat_drive, uint32_t current_c
 	else
 		fat_offset = current_cluster << 2u;
 
-	fat_sector_number =
-		fat_drive.partition_start_sector + fat_drive.reserved_sectors_count
-			+ (fat_offset/(1u << fat_drive.log_bytes_per_sector));
-	fat_entry_offset = fat_offset%(1u << fat_drive.log_bytes_per_sector);
+	fat_sector_number = fat_drive.partition_start_sector + fat_drive.reserved_sectors_count
+		+ (fat_offset >> fat_drive.log_bytes_per_sector);
+	fat_entry_offset = fat_offset & ((1u << fat_drive.log_bytes_per_sector) - 1);
 
 	data = fat_drive.read_bytes((fat_sector_number << fat_drive.log_bytes_per_sector) + fat_entry_offset, 4);
 
@@ -215,32 +241,4 @@ static void print_entry_info(struct fat_entry entry) {
 	printf("  ");
 	fat_print_entry_attr(entry.attr);
 	printf("\n");
-}
-
-void fat_save_file(struct fat_drive *fat_drive, uint32_t cluster, uint32_t bytes) {
-	FILE *f;
-	uint8_t *data;
-	uint64_t address;
-	uint32_t cluster_size_bytes;
-
-	cluster_size_bytes = 1u << (uint32_t) (fat_drive->log_sectors_per_cluster + fat_drive->log_bytes_per_sector);
-	f = fopen("../out.txt", "wb");
-
-	do {
-		address = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
-
-		if (bytes >= cluster_size_bytes) {
-			data = fat_drive->read_bytes(address, cluster_size_bytes);
-			fwrite(data, cluster_size_bytes, 1, f);
-			bytes -= cluster_size_bytes;
-		} else {
-			data = fat_drive->read_bytes(address, bytes);
-			fwrite(data, bytes, 1, f);
-			bytes = 0;
-		}
-
-		cluster = find_next_cluster(*fat_drive, cluster);
-	} while (!is_eof(*fat_drive, cluster) && bytes!=0);
-
-	fclose(f);
 }

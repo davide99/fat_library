@@ -1,5 +1,4 @@
 #include <stdio.h>
-#define FAT_DEBUG
 #include "fat.h"
 #include "reader.h"
 
