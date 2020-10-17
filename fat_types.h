@@ -91,6 +91,8 @@ struct mbr_partition_entry {
   uint32_t sectors;
 } __attribute__((packed));
 
+#define MBR_BOOT_SIG ((uint16_t)(0xAA55u))
+
 //fat_entry attrib masks
 #define ATTR_READ_ONLY ((uint8_t)(0x01u))
 #define ATTR_HIDDEN ((uint8_t)(0x02u))

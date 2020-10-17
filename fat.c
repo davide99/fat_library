@@ -2,6 +2,7 @@
 #include "fat_types.h"
 #include "fat_utils.h"
 #include <stdio.h>
+#include <assert.h>
 
 //Private functions
 static int get_partition_info(struct fat_drive *fat_drive);
@@ -30,23 +31,22 @@ error:
 }
 
 static inline int get_partition_info(struct fat_drive *fat_drive) {
-	uint8_t *mbr;
 	struct mbr_partition_entry *mbr_partition;
 
-	if ((mbr = fat_drive->read_bytes(0, 512))==NULL)
-		goto error;
-
-	//Check the signature
-	if (mbr[510]!=0x55u || mbr[511]!=0xAAu)
-		goto error;
-
 	//Get the first entry in the partition table
-	mbr_partition = (struct mbr_partition_entry *) (mbr + 0x1BEu);
+	if ((mbr_partition = (struct mbr_partition_entry *) fat_drive->read_bytes(
+		0x1BEu,
+		sizeof(struct mbr_partition_entry)))==NULL)
+		goto error;
 
 	if (mbr_partition->type!=0) {
-		fat_drive->partition_start_sector = mbr_partition->lba_begin;
+		fat_drive->first_partition_sector = mbr_partition->lba_begin;
 		return 0;
 	}
+
+	//Check the signature
+	if (*((uint16_t *) fat_drive->read_bytes(510, 2))!=MBR_BOOT_SIG)
+		goto error;
 
 error:
 	return -1;
@@ -54,10 +54,10 @@ error:
 
 static inline int read_BPB(struct fat_drive *fat_drive) {
 	struct fat_BPB *bpb;
-	uint32_t root_dir_sectors, data_sectors, count_of_clusters, total_sectors;
+	uint32_t root_dir_sectors, data_sectors_cluster;
 
 	if ((bpb = (struct fat_BPB *) fat_drive->read_bytes(
-		fat_drive->partition_start_sector << fat_drive->log_bytes_per_sector,
+		fat_drive->first_partition_sector << fat_drive->log_bytes_per_sector,
 		sizeof(struct fat_BPB)))==NULL)
 		goto error;
 
@@ -66,33 +66,28 @@ static inline int read_BPB(struct fat_drive *fat_drive) {
 		goto error;
 
 	//Parse the BPB: save just what we need
+	//Size
 	fat_drive->log_sectors_per_cluster = fat_log2(bpb->sectors_per_cluster);
-	fat_drive->reserved_sectors_count = bpb->reserved_sectors_count;
-
 	fat_drive->fat_size_sectors = (!bpb->fat_size_sectors_16 ? bpb->ver_dep.v32.fat_size_sectors_32
 															 : bpb->fat_size_sectors_16);
 
-	//Determine fat version, fatgen pag. 14
-	root_dir_sectors = bpb->root_entries_count << 5u; //Each entry is 32 bytes
-	//Ceil division: from bytes to sectors
-	root_dir_sectors =
-		(root_dir_sectors + ((1u << fat_drive->log_bytes_per_sector) - 1)) >> fat_drive->log_bytes_per_sector;
-	fat_drive->first_root_dir_sector =
-		fat_drive->partition_start_sector + bpb->reserved_sectors_count
-			+ fat_drive->fat_size_sectors*bpb->number_of_fats;
+	//Pointers
+	fat_drive->first_fat_sector = fat_drive->first_partition_sector + bpb->reserved_sectors_count;
+	fat_drive->first_root_dir_sector = fat_drive->first_fat_sector + fat_drive->fat_size_sectors*bpb->number_of_fats;
+
+	//Determine fat version, fatgen pag. 14, we need to be extra careful to avoid overflows
+	//We end up with (at most) 16+5-9+1=13 bits. However total sector is 32 bit long
+	root_dir_sectors = ((uint32_t) (bpb->root_entries_count << 5u) >> fat_drive->log_bytes_per_sector) +
+		(((1u << fat_drive->log_bytes_per_sector) - 1) >> fat_drive->log_bytes_per_sector);
+
 	fat_drive->first_data_sector = fat_drive->first_root_dir_sector + root_dir_sectors;
 
-	total_sectors = (!bpb->total_sectors_16 ? bpb->total_sectors_32 : bpb->total_sectors_16);
+	data_sectors_cluster = ((!bpb->total_sectors_16 ? bpb->total_sectors_32 : bpb->total_sectors_16) -
+		(fat_drive->first_data_sector - fat_drive->first_partition_sector)) >> fat_drive->log_sectors_per_cluster;
 
-	data_sectors =
-		total_sectors -
-			(bpb->reserved_sectors_count + bpb->number_of_fats*fat_drive->fat_size_sectors + root_dir_sectors);
-
-	count_of_clusters = data_sectors >> fat_drive->log_sectors_per_cluster;
-
-	if (count_of_clusters < 4085) {
+	if (data_sectors_cluster < 4085) {
 		goto error; //FAT12
-	} else if (count_of_clusters < 65525) {
+	} else if (data_sectors_cluster < 65525) {
 		fat_drive->type = FAT16;
 	} else {
 		fat_drive->type = FAT32;
@@ -101,11 +96,11 @@ static inline int read_BPB(struct fat_drive *fat_drive) {
 		if (fat_drive->first_root_dir_sector)
 			goto error;
 		fat_drive->first_root_dir_sector =
-			fat_drive->partition_start_sector + (bpb->ver_dep.v32.root_cluster << fat_drive->log_sectors_per_cluster);
+			fat_drive->first_partition_sector + (bpb->ver_dep.v32.root_cluster << fat_drive->log_sectors_per_cluster);
 	}
 
 	//Check the signature
-	if (bpb->signature!=0xAA55u)
+	if (bpb->signature!=MBR_BOOT_SIG)
 		goto error;
 
 	return 0;
@@ -201,8 +196,7 @@ static uint32_t find_next_cluster(struct fat_drive fat_drive, uint32_t current_c
 	else
 		fat_offset = current_cluster << 2u;
 
-	fat_sector_number = fat_drive.partition_start_sector + fat_drive.reserved_sectors_count
-		+ (fat_offset >> fat_drive.log_bytes_per_sector);
+	fat_sector_number = fat_drive.first_fat_sector + (fat_offset >> fat_drive.log_bytes_per_sector);
 	fat_entry_offset = fat_offset & ((1u << fat_drive.log_bytes_per_sector) - 1);
 
 	data = fat_drive.read_bytes((fat_sector_number << fat_drive.log_bytes_per_sector) + fat_entry_offset, 4);

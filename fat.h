@@ -10,18 +10,18 @@ enum fat_version {
 };
 
 struct fat_drive {
-  //From external driver
-  uint8_t log_bytes_per_sector;
-  //From MBR
-  uint32_t partition_start_sector;
-  //From BPB
-  uint8_t log_sectors_per_cluster;
-  uint16_t reserved_sectors_count;
-  uint32_t fat_size_sectors;
-  //Calculated
   enum fat_version type;
-  uint32_t first_data_sector;
+
+  //Sizes
+  uint8_t log_bytes_per_sector;
+  uint8_t log_sectors_per_cluster;
+  uint32_t fat_size_sectors;
+
+  //Pointers
+  uint32_t first_partition_sector; //AKA reserved region start, AKA lba begin in MBR
+  uint32_t first_fat_sector;
   uint32_t first_root_dir_sector;
+  uint32_t first_data_sector;
 
   //Function pointers
   fat_read_bytes_func_t read_bytes;
