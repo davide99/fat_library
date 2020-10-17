@@ -16,6 +16,7 @@ struct fat_drive {
   uint8_t log_bytes_per_sector;
   uint8_t log_sectors_per_cluster;
   uint32_t fat_size_sectors;
+  uint16_t entries_per_cluster;
 
   //Pointers
   uint32_t first_partition_sector; //AKA reserved region start, AKA lba begin in MBR

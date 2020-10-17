@@ -70,6 +70,9 @@ static inline int read_BPB(struct fat_drive *fat_drive) {
 	fat_drive->log_sectors_per_cluster = fat_log2(bpb->sectors_per_cluster);
 	fat_drive->fat_size_sectors = (!bpb->fat_size_sectors_16 ? bpb->ver_dep.v32.fat_size_sectors_32
 															 : bpb->fat_size_sectors_16);
+	fat_drive->entries_per_cluster =
+		(1u << (uint32_t) (fat_drive->log_sectors_per_cluster + fat_drive->log_bytes_per_sector))
+			/sizeof(struct fat_entry);
 
 	//Pointers
 	fat_drive->first_fat_sector = fat_drive->first_partition_sector + bpb->reserved_sectors_count;
@@ -110,21 +113,17 @@ error:
 }
 
 void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
-	uint16_t i;
 	struct fat_entry *fatEntry;
 	int exit = 0;
-	uint32_t where;
-	uint32_t entries_per_cluster =
-		((1u << fat_drive->log_sectors_per_cluster) << fat_drive->log_bytes_per_sector)/sizeof(struct fat_entry);
+	uint64_t where;
 	uint32_t entries_per_cluster_current = 0;
 
-	if (cluster==0) { //We want the root dir?
+	if (cluster==0) //We want the root dir?
 		where = fat_drive->first_root_dir_sector << fat_drive->log_bytes_per_sector; //Move to the root dir sector
-	} else {
+	else
 		where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
-	}
 
-	for (i = 0; !exit; i++) {
+	while (!exit) {
 		fatEntry = (struct fat_entry *) fat_drive->read_bytes(where, sizeof(struct fat_entry));
 		entries_per_cluster_current++;
 
@@ -141,12 +140,14 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 
 		print_entry_info(*fatEntry);
 
-		if (entries_per_cluster_current==entries_per_cluster) {
-			if (is_eof(*fat_drive, cluster)) {
+		//No more entries in the cluster?
+		if (entries_per_cluster_current==fat_drive->entries_per_cluster) {
+			//Should we move to the next cluster?
+			if (is_eof(*fat_drive, cluster)) {    //Nope, if this is the last cluster
 				break;
-			} else {
+			} else {                            //Move to the next cluster
 				cluster = find_next_cluster(*fat_drive, cluster);
-				where = first_sector_of_cluster(fat_drive, cluster);
+				where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
 				entries_per_cluster_current = 0;
 			}
 		} else {
@@ -199,7 +200,7 @@ static uint32_t find_next_cluster(struct fat_drive fat_drive, uint32_t current_c
 	fat_sector_number = fat_drive.first_fat_sector + (fat_offset >> fat_drive.log_bytes_per_sector);
 	fat_entry_offset = fat_offset & ((1u << fat_drive.log_bytes_per_sector) - 1);
 
-	data = fat_drive.read_bytes((fat_sector_number << fat_drive.log_bytes_per_sector) + fat_entry_offset, 4);
+	data = fat_drive.read_bytes(((uint64_t) fat_sector_number << fat_drive.log_bytes_per_sector) + fat_entry_offset, 4);
 
 	if (fat_drive.type==FAT16)
 		return *((uint16_t *) data);
