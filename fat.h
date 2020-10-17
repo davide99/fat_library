@@ -26,17 +26,19 @@ struct fat_drive {
     uint32_t hidden_sectors;
     //Calculated
     enum fat_version fat_version;
+    uint32_t first_data_sector;
+    uint32_t first_root_dir_sector;
 
     //Function pointers
     fat_read_bytes_func_t read_bytes;
 };
 
-int fat_init(struct fat_drive *fatDrive, uint32_t sectorSize, fat_read_bytes_func_t readBytesFunc);
+int fat_init(struct fat_drive *fat_drive, uint32_t sectorSize, fat_read_bytes_func_t read_bytes_func);
 
 #ifdef FAT_DEBUG
 int test();
-void fat_print_root_dir(struct fat_drive *fatDrive);
-void fat_print_sub(struct fat_drive *fatDrive);
+void fat_print_root_dir(struct fat_drive *fat_drive);
+void fat_print_dir(struct fat_drive *fat_drive, uint32_t first_cluster);
 #endif
 
 #endif
