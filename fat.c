@@ -160,31 +160,6 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 		}
 	}
 }
-uint32_t fat_get_free_clusters_count(struct fat_drive fat_drive) {
-	//The first 2 clusters in the FAT are reserved. fatgen pag. 18
-	uint8_t *data;
-	uint32_t where;
-	uint32_t empty_clusters = 0;
-
-	where = (fat_drive.lba_begin + fat_drive.reserved_sectors_count) << fat_drive.log_sector_size;
-
-	while (1) {
-		if (fat_drive.type==FAT16)
-			where += 32; //2*16
-		else
-			where += 64; //2*32
-
-		if (where==fat_drive.fat_size_sectors << fat_drive.log_sector_size)
-			break;
-
-		data = fat_drive.read_bytes(where, 4);
-
-		if ((fat_drive.type==FAT16 && *((uint16_t *) data)==0) || (*((uint32_t *) data)==0))
-			empty_clusters++;
-	}
-
-	return empty_clusters;
-}
 
 static inline uint32_t first_sector_of_cluster(struct fat_drive *fat_drive, uint32_t cluster) {
 	return ((cluster - 2) << fat_drive->log_sectors_per_cluster) + fat_drive->first_data_sector;

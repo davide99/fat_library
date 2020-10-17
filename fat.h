@@ -31,6 +31,5 @@ struct fat_drive {
 
 int fat_init(struct fat_drive *fat_drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
 void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster);
-uint32_t fat_get_free_clusters_count(struct fat_drive fat_drive);
 
 #endif
