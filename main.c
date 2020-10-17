@@ -11,10 +11,10 @@ int main() {
 	printf("Block size: %d Bytes\n", 1u << fatDrive.log_bytes_per_sector);
 	printf("LBA begin: %d\n", fatDrive.first_partition_sector);
 
-	fat_print_dir(&fatDrive, 0);
+	fat_print_dir(fatDrive, 0);
 	printf("\n");
-	fat_print_dir(&fatDrive, 0xF);
-	fat_save_file(&fatDrive, 2, 193082);
+	fat_print_dir(fatDrive, 0xF);
+	fat_save_file(fatDrive, 2, 193082);
 
 	return 0;
 

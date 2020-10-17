@@ -31,9 +31,9 @@ struct fat_drive {
   fat_read_bytes_func_t read_bytes;
 };
 
-int fat_init(struct fat_drive *fat_drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
-void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster);
-void fat_save_file(struct fat_drive *fat_drive, uint32_t cluster, uint32_t bytes);
+int fat_init(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
+void fat_print_dir(struct fat_drive drive, uint32_t cluster);
+void fat_save_file(struct fat_drive drive, uint32_t cluster, uint32_t size_bytes);
 
 #define ROOT_DIR_CLUSTER 0
 
