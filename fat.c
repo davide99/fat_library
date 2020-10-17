@@ -117,10 +117,12 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 	uint32_t entries_per_cluster_current = 0;
 
 	if (cluster==ROOT_DIR_CLUSTER) {    //We want the root dir?
-		if (fat_drive->type==FAT32)     //FAT32? No prob
-			cluster = fat_drive->root_dir.first_cluster;
-		else
+		if (fat_drive->type==FAT16) {
 			where = fat_drive->root_dir.first_sector << fat_drive->log_bytes_per_sector;
+		} else {
+			cluster = fat_drive->root_dir.first_cluster;
+			where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
+		}
 	} else {
 		where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
 	}
@@ -130,17 +132,17 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 		entries_per_cluster_current++;
 
 		switch (fat_entry->name.base[0]) {
-			case 0xE5u: printf("Deleted file: [?%.7s.%.3s]\n", fat_entry->name.base + 1, fat_entry->name.ext);
-				continue;
+			case 0xE5u: printf("Deleted file: ?%.7s.%.3s\n", fat_entry->name.base + 1, fat_entry->name.ext);
+				break;
 			case 0x00u: exit = 1;
 				continue;
 			case 0x05u: //KANJI
 				printf("File starting with 0xE5: [%c%.7s.%.3s]\n", 0xE5, fat_entry->name.base + 1, fat_entry->name.ext);
+				print_entry_info(*fat_entry);
 				break;
 			default: printf("File: [%.8s.%.3s]\n", fat_entry->name.base, fat_entry->name.ext);
+				print_entry_info(*fat_entry);
 		}
-
-		print_entry_info(*fat_entry);
 
 		//If we are parsing the root directory on FAT16 every entry is contiguous, or
 		//are there still entries in the cluster?
