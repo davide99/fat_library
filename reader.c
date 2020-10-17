@@ -1,7 +1,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#define BUFFER_SIZE 512
+//TODO: fix size
+#define BUFFER_SIZE 16384
 uint8_t buffer[BUFFER_SIZE];
 
 uint8_t *debug_read_bytes(uint64_t address, uint32_t bytes) {

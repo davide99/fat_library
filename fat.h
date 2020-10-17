@@ -13,9 +13,9 @@ enum fat_version {
 
 struct fat_drive {
   //From external driver
-  uint16_t log_sector_size;
+  uint8_t log_bytes_per_sector;
   //From MBR
-  uint32_t lba_begin;
+  uint32_t partition_start_sector;
   //From BPB
   uint8_t log_sectors_per_cluster;
   uint16_t reserved_sectors_count;
@@ -31,5 +31,6 @@ struct fat_drive {
 
 int fat_init(struct fat_drive *fat_drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
 void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster);
+void fat_save_file(struct fat_drive *fat_drive, uint32_t cluster, uint32_t bytes);
 
 #endif

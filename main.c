@@ -9,12 +9,13 @@ int main() {
 	if (fat_init(&fatDrive, 512, debug_read_bytes))
 		goto error;
 
-	printf("Block size: %d Bytes\n", 1u << fatDrive.log_sector_size);
-	printf("LBA begin: %d\n", fatDrive.lba_begin);
+	printf("Block size: %d Bytes\n", 1u << fatDrive.log_bytes_per_sector);
+	printf("LBA begin: %d\n", fatDrive.partition_start_sector);
 
 	fat_print_dir(&fatDrive, 0);
 	printf("\n");
 	fat_print_dir(&fatDrive, 0xF);
+	fat_save_file(&fatDrive, 2, 193082);
 
 	return 0;
 
