@@ -4,9 +4,8 @@
 #include <stdint.h>
 
 //Bootsector and BPB
-struct fat_BS_and_BPB {
-  uint8_t jmp_boot[3];
-  uint8_t oem_name[8];
+struct fat_BPB {
+  uint8_t padding1[11];
   uint16_t bytes_per_sector;
   uint8_t sectors_per_cluster;
   uint16_t reserved_sectors_count;
@@ -44,6 +43,8 @@ struct fat_BS_and_BPB {
 	  uint8_t filesystem_type[8];
 	} __attribute__((packed)) v32;
   } __attribute__((packed)) ver_dep;
+  uint8_t padding2[420];
+  uint16_t signature;
 } __attribute__((packed));
 
 //FAT specific types
@@ -98,5 +99,7 @@ struct mbr_partition_entry {
 #define ATTR_DIRECTORY ((uint8_t)(0x10u))
 #define ATTR_ARCHIVE ((uint8_t)(0x20u))
 #define ATTR_LONG_NAME ((uint8_t)(0x0Fu)) //READ_ONLY | HIDDEN | SYSTEM | VOLUME_ID
+
+#define FAT_BASE_YEAR (1980)
 
 #endif

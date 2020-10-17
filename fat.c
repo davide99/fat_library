@@ -1,6 +1,6 @@
 #include "fat.h"
 #include "fat_types.h"
-#include <string.h>
+#include "fat_utils.h"
 
 #ifdef FAT_DEBUG
 #include <stdio.h>
@@ -10,18 +10,16 @@
 static int get_partition_info(struct fat_drive *fat_drive);
 static int read_BPB(struct fat_drive *fat_drive);
 static uint32_t first_sector_of_cluster(struct fat_drive *fat_drive, uint32_t cluster);
+static void print_entry_info(struct fat_entry entry);
 
-int fat_init(struct fat_drive *fat_drive, uint32_t sectorSize, fat_read_bytes_func_t read_bytes_func) {
+int fat_init(struct fat_drive *fat_drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func) {
 	fat_drive->read_bytes = read_bytes_func;
 
 	if (get_partition_info(fat_drive))
 		goto error;
 
-	//We store the log2(sectorSize)
-	fat_drive->log_sector_size = 0;
-
-	while (sectorSize >>= 1u)
-		fat_drive->log_sector_size++;
+	//We store the log2(sector_size)
+	fat_drive->log_sector_size = fat_log2(sector_size);
 
 	if (read_BPB(fat_drive))
 		goto error;
@@ -56,57 +54,55 @@ error:
 }
 
 static inline int read_BPB(struct fat_drive *fat_drive) {
-	uint8_t *bpb;
-	struct fat_BS_and_BPB *s;
-	uint32_t root_dir_sectors, data_sectors, count_of_clusters;
+	struct fat_BPB *bpb;
+	uint32_t root_dir_sectors, data_sectors, count_of_clusters, total_sectors, fat_size_sectors;
 
-	if ((bpb = fat_drive->read_bytes(fat_drive->lba_begin << fat_drive->log_sector_size, 512))==NULL)
+	if ((bpb = (struct fat_BPB *) fat_drive->read_bytes(
+		fat_drive->lba_begin << fat_drive->log_sector_size,
+		sizeof(struct fat_BPB)))==NULL)
 		goto error;
 
-	s = (struct fat_BS_and_BPB *) bpb;
-
 	//Should be equal to the previous set size
-	if (s->bytes_per_sector!=(1u << fat_drive->log_sector_size))
+	if (bpb->bytes_per_sector!=(1u << fat_drive->log_sector_size))
 		goto error;
 
 	//Parse the BPB: save just what we need
-	fat_drive->sectors_per_cluster = s->sectors_per_cluster;
-	fat_drive->reserved_sectors_count = s->reserved_sectors_count;
-	fat_drive->number_of_fats = s->number_of_fats;
-	fat_drive->root_entries_count = s->root_entries_count;
-	fat_drive->total_sectors = (s->total_sectors_16==0 ? s->total_sectors_32 : s->total_sectors_16);
-	fat_drive->fat_size_sectors = (s->fat_size_sectors_16==0 ? s->ver_dep.v32.fat_size_sectors_32
-															 : s->fat_size_sectors_16);
-	fat_drive->hidden_sectors = s->hidden_sectors;
+	fat_drive->log_sectors_per_cluster = fat_log2(bpb->sectors_per_cluster);
 
-	//Determine fat version
-	root_dir_sectors = fat_drive->root_entries_count << 5u; //Each entry is 32 bytes
+	fat_size_sectors = (!bpb->fat_size_sectors_16 ? bpb->ver_dep.v32.fat_size_sectors_32
+												  : bpb->fat_size_sectors_16);
+
+	//Determine fat version, fatgen pag. 14
+	root_dir_sectors = bpb->root_entries_count << 5u; //Each entry is 32 bytes
 	//Ceil division: from bytes to sectors
 	root_dir_sectors = (root_dir_sectors + ((1u << fat_drive->log_sector_size) - 1)) >> fat_drive->log_sector_size;
 	fat_drive->first_root_dir_sector =
-		fat_drive->lba_begin + s->reserved_sectors_count + s->number_of_fats*fat_drive->fat_size_sectors;
+		fat_drive->lba_begin + bpb->reserved_sectors_count + fat_size_sectors*bpb->number_of_fats;
 	fat_drive->first_data_sector = fat_drive->first_root_dir_sector + root_dir_sectors;
 
-	data_sectors = fat_drive->total_sectors -
-		(fat_drive->reserved_sectors_count +
-			fat_drive->number_of_fats*fat_drive->fat_size_sectors +
-			root_dir_sectors);
+	total_sectors = (!bpb->total_sectors_16 ? bpb->total_sectors_32 : bpb->total_sectors_16);
 
-	count_of_clusters = data_sectors/fat_drive->sectors_per_cluster;
+	data_sectors =
+		total_sectors - (bpb->reserved_sectors_count + bpb->number_of_fats*fat_size_sectors + root_dir_sectors);
 
-	//fatgen pag. 15
+	count_of_clusters = data_sectors >> fat_drive->log_sectors_per_cluster;
+
 	if (count_of_clusters < 4085) {
-		goto error;
+		goto error; //FAT12
 	} else if (count_of_clusters < 65525) {
 		fat_drive->fat_version = FAT16;
 	} else {
 		fat_drive->fat_version = FAT32;
+		//On FAT32 first_root_dir_sector as previously calculated should be 0
+		//It is actually stored in the fat version dependent part of the BPB
+		if (fat_drive->first_root_dir_sector)
+			goto error;
 		fat_drive->first_root_dir_sector =
-			fat_drive->lba_begin + s->ver_dep.v32.root_cluster*fat_drive->sectors_per_cluster;
+			fat_drive->lba_begin + (bpb->ver_dep.v32.root_cluster << fat_drive->log_sectors_per_cluster);
 	}
 
 	//Check the signature
-	if (bpb[510]!=0x55u || bpb[511]!=0xAAu)
+	if (bpb->signature!=0xAA55u)
 		goto error;
 
 	return 0;
@@ -141,31 +137,33 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t first_cluster) {
 			default: printf("File: [%.8s.%.3s]\n", fatEntry->name.base, fatEntry->name.ext);
 		}
 
-		printf("  Modified: %04d-%02d-%02d %02d:%02d.%02d    Start: [%08X]    Size: %d\n",
-			   1980 + fatEntry->write.date.years_from_1980, fatEntry->write.date.month, fatEntry->write.date.day,
-			   fatEntry->write.time.hours, fatEntry->write.time.mins, fatEntry->write.time.sec_gran_2*2,
-			   fatEntry->first_cluster_low | (uint32_t) (fatEntry->first_cluster_high << 16u),
-			   fatEntry->file_size_bytes);
-		printf("  Created: %04d-%02d-%02d %02d:%02d:%02d.%02d\n",
-			   1980 + fatEntry->creation.date.years_from_1980, fatEntry->creation.date.month,
-			   fatEntry->creation.date.day, fatEntry->creation.time.hours, fatEntry->creation.time.mins,
-			   fatEntry->creation.time.sec_gran_2*2 + fatEntry->creation.time_tenth_of_secs/100,
-			   fatEntry->creation.time_tenth_of_secs%100
-		);
-		printf("  Last access: %04d-%02d-%02d\n",
-			   1980 + fatEntry->last_access_date.years_from_1980, fatEntry->last_access_date.month,
-			   fatEntry->last_access_date.day
-		);
-
-		printf("  Attributes: ro %d, hidden %d, system %d, volume_id %d, dir %d, archive %d, long name %d\n",
-			   (fatEntry->attr & ATTR_READ_ONLY)!=0, (fatEntry->attr & ATTR_HIDDEN)!=0,
-			   (fatEntry->attr & ATTR_SYSTEM)!=0,
-			   (fatEntry->attr & ATTR_VOLUME_ID)!=0, (fatEntry->attr & ATTR_DIRECTORY)!=0,
-			   (fatEntry->attr & ATTR_ARCHIVE)!=0,
-			   (fatEntry->attr & ATTR_LONG_NAME)!=0);
+		print_entry_info(*fatEntry);
 	}
 }
 
 static inline uint32_t first_sector_of_cluster(struct fat_drive *fat_drive, uint32_t cluster) {
-	return (cluster - 2)*fat_drive->sectors_per_cluster + fat_drive->first_data_sector;
+	return ((cluster - 2) << fat_drive->log_sectors_per_cluster) + fat_drive->first_data_sector;
+}
+
+static void print_entry_info(struct fat_entry entry) {
+	printf("  Modified: ");
+	fat_print_date(entry.write.date);
+	printf(" ");
+	fat_print_time(entry.write.time);
+	printf("    Start: %d    Size: %d\n",
+		   fat_make_dword(entry.first_cluster_high, entry.first_cluster_low), entry.file_size_bytes);
+
+	printf("  Created: ");
+	fat_print_date(entry.creation.date);
+	printf(" ");
+	fat_print_time_tenth(entry.creation.time, entry.creation.time_tenth_of_secs);
+	printf("\n");
+
+	printf("  Last access: ");
+	fat_print_date(entry.last_access_date);
+	printf("\n");
+
+	printf("  ");
+	fat_print_entry_attr(entry.attr);
+	printf("\n");
 }
