@@ -1,10 +1,8 @@
 #include "fat.h"
 #include "fat_types.h"
 #include "fat_utils.h"
-
-#ifdef FAT_DEBUG
 #include <stdio.h>
-#endif
+
 
 //Private functions
 static int get_partition_info(struct fat_drive *fat_drive);
@@ -78,9 +76,11 @@ static inline int read_BPB(struct fat_drive *fat_drive) {
 	//Determine fat version, fatgen pag. 14
 	root_dir_sectors = bpb->root_entries_count << 5u; //Each entry is 32 bytes
 	//Ceil division: from bytes to sectors
-	root_dir_sectors = (root_dir_sectors + ((1u << fat_drive->log_bytes_per_sector) - 1)) >> fat_drive->log_bytes_per_sector;
+	root_dir_sectors =
+		(root_dir_sectors + ((1u << fat_drive->log_bytes_per_sector) - 1)) >> fat_drive->log_bytes_per_sector;
 	fat_drive->first_root_dir_sector =
-		fat_drive->partition_start_sector + bpb->reserved_sectors_count + fat_drive->fat_size_sectors*bpb->number_of_fats;
+		fat_drive->partition_start_sector + bpb->reserved_sectors_count
+			+ fat_drive->fat_size_sectors*bpb->number_of_fats;
 	fat_drive->first_data_sector = fat_drive->first_root_dir_sector + root_dir_sectors;
 
 	total_sectors = (!bpb->total_sectors_16 ? bpb->total_sectors_32 : bpb->total_sectors_16);
@@ -175,7 +175,8 @@ static uint32_t find_next_cluster(struct fat_drive fat_drive, uint32_t current_c
 		fat_offset = current_cluster << 2u;
 
 	fat_sector_number =
-		fat_drive.partition_start_sector + fat_drive.reserved_sectors_count + (fat_offset/(1u << fat_drive.log_bytes_per_sector));
+		fat_drive.partition_start_sector + fat_drive.reserved_sectors_count
+			+ (fat_offset/(1u << fat_drive.log_bytes_per_sector));
 	fat_entry_offset = fat_offset%(1u << fat_drive.log_bytes_per_sector);
 
 	data = fat_drive.read_bytes((fat_sector_number << fat_drive.log_bytes_per_sector) + fat_entry_offset, 4);
@@ -216,29 +217,30 @@ static void print_entry_info(struct fat_entry entry) {
 	printf("\n");
 }
 
-///////
-
 void fat_save_file(struct fat_drive *fat_drive, uint32_t cluster, uint32_t bytes) {
+	FILE *f;
 	uint8_t *data;
-	uint32_t where;
+	uint64_t address;
+	uint32_t cluster_size_bytes;
 
-	where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
-	FILE *f = fopen("../out.txt", "wb");
+	cluster_size_bytes = 1u << (uint32_t) (fat_drive->log_sectors_per_cluster + fat_drive->log_bytes_per_sector);
+	f = fopen("../out.txt", "wb");
 
 	do {
-		data = fat_drive->read_bytes(where, (1u << fat_drive->log_sectors_per_cluster) << fat_drive->log_bytes_per_sector);
+		address = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
 
-		if (bytes >= (1u << fat_drive->log_sectors_per_cluster) << fat_drive->log_bytes_per_sector) {
-			fwrite(data, (1u << fat_drive->log_sectors_per_cluster) << fat_drive->log_bytes_per_sector, 1, f);
-			bytes -= (1u << fat_drive->log_sectors_per_cluster) << fat_drive->log_bytes_per_sector;
+		if (bytes >= cluster_size_bytes) {
+			data = fat_drive->read_bytes(address, cluster_size_bytes);
+			fwrite(data, cluster_size_bytes, 1, f);
+			bytes -= cluster_size_bytes;
 		} else {
+			data = fat_drive->read_bytes(address, bytes);
 			fwrite(data, bytes, 1, f);
 			bytes = 0;
 		}
 
 		cluster = find_next_cluster(*fat_drive, cluster);
-		where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
-	} while (!is_eof(*fat_drive, cluster) && bytes != 0);
+	} while (!is_eof(*fat_drive, cluster) && bytes!=0);
 
 	fclose(f);
 }

@@ -2,8 +2,6 @@
 #define FAT_H
 
 #include <stdint.h>
-//TODO: remove
-#define FAT_DEBUG
 
 typedef uint8_t *(*fat_read_bytes_func_t)(uint64_t address, uint32_t bytes);
 
