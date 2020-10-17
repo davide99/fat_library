@@ -113,7 +113,7 @@ error:
 }
 
 void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
-	struct fat_entry *fatEntry;
+	struct fat_entry *fat_entry;
 	int exit = 0;
 	uint64_t where;
 	uint32_t entries_per_cluster_current = 0;
@@ -124,21 +124,21 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 		where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
 
 	while (!exit) {
-		fatEntry = (struct fat_entry *) fat_drive->read_bytes(where, sizeof(struct fat_entry));
+		fat_entry = (struct fat_entry *) fat_drive->read_bytes(where, sizeof(struct fat_entry));
 		entries_per_cluster_current++;
 
-		switch (fatEntry->name.base[0]) {
-			case 0xE5u: printf("Deleted file: [?%.7s.%.3s]\n", fatEntry->name.base + 1, fatEntry->name.ext);
+		switch (fat_entry->name.base[0]) {
+			case 0xE5u: printf("Deleted file: [?%.7s.%.3s]\n", fat_entry->name.base + 1, fat_entry->name.ext);
 				continue;
 			case 0x00u: exit = 1;
 				continue;
 			case 0x05u: //KANJI
-				printf("File starting with 0xE5: [%c%.7s.%.3s]\n", 0xE5, fatEntry->name.base + 1, fatEntry->name.ext);
+				printf("File starting with 0xE5: [%c%.7s.%.3s]\n", 0xE5, fat_entry->name.base + 1, fat_entry->name.ext);
 				break;
-			default: printf("File: [%.8s.%.3s]\n", fatEntry->name.base, fatEntry->name.ext);
+			default: printf("File: [%.8s.%.3s]\n", fat_entry->name.base, fat_entry->name.ext);
 		}
 
-		print_entry_info(*fatEntry);
+		print_entry_info(*fat_entry);
 
 		//No more entries in the cluster?
 		if (entries_per_cluster_current==fat_drive->entries_per_cluster) {
