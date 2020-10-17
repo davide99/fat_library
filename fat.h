@@ -21,7 +21,10 @@ struct fat_drive {
   //Pointers
   uint32_t first_partition_sector; //AKA reserved region start, AKA lba begin in MBR
   uint32_t first_fat_sector;
-  uint32_t first_root_dir_sector;
+  union {
+	uint32_t first_sector;
+	uint32_t first_cluster;
+  } root_dir;
   uint32_t first_data_sector;
 
   //Function pointers
@@ -31,5 +34,7 @@ struct fat_drive {
 int fat_init(struct fat_drive *fat_drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
 void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster);
 void fat_save_file(struct fat_drive *fat_drive, uint32_t cluster, uint32_t bytes);
+
+#define ROOT_DIR_CLUSTER 0
 
 #endif

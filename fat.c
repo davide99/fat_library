@@ -2,7 +2,6 @@
 #include "fat_types.h"
 #include "fat_utils.h"
 #include <stdio.h>
-#include <assert.h>
 
 //Private functions
 static int get_partition_info(struct fat_drive *fat_drive);
@@ -76,14 +75,14 @@ static inline int read_BPB(struct fat_drive *fat_drive) {
 
 	//Pointers
 	fat_drive->first_fat_sector = fat_drive->first_partition_sector + bpb->reserved_sectors_count;
-	fat_drive->first_root_dir_sector = fat_drive->first_fat_sector + fat_drive->fat_size_sectors*bpb->number_of_fats;
+	fat_drive->root_dir.first_sector = fat_drive->first_fat_sector + fat_drive->fat_size_sectors*bpb->number_of_fats;
 
 	//Determine fat version, fatgen pag. 14, we need to be extra careful to avoid overflows
 	//We end up with (at most) 16+5-9+1=13 bits. However total sector is 32 bit long
 	root_dir_sectors = ((uint32_t) (bpb->root_entries_count << 5u) >> fat_drive->log_bytes_per_sector) +
 		(((1u << fat_drive->log_bytes_per_sector) - 1) >> fat_drive->log_bytes_per_sector);
 
-	fat_drive->first_data_sector = fat_drive->first_root_dir_sector + root_dir_sectors;
+	fat_drive->first_data_sector = fat_drive->root_dir.first_sector + root_dir_sectors;
 
 	data_sectors_cluster = ((!bpb->total_sectors_16 ? bpb->total_sectors_32 : bpb->total_sectors_16) -
 		(fat_drive->first_data_sector - fat_drive->first_partition_sector)) >> fat_drive->log_sectors_per_cluster;
@@ -94,12 +93,11 @@ static inline int read_BPB(struct fat_drive *fat_drive) {
 		fat_drive->type = FAT16;
 	} else {
 		fat_drive->type = FAT32;
-		//On FAT32 first_root_dir_sector as previously calculated should be 0
-		//It is actually stored in the fat version dependent part of the BPB
-		if (fat_drive->first_root_dir_sector)
+		//On FAT32 root_dir.first_sector as previously calculated must be 0
+		//It is actually stored in the fat version dependent part of the BPB and it's the beginning of a cluster chain
+		if (fat_drive->root_dir.first_sector)
 			goto error;
-		fat_drive->first_root_dir_sector =
-			fat_drive->first_partition_sector + (bpb->ver_dep.v32.root_cluster << fat_drive->log_sectors_per_cluster);
+		fat_drive->root_dir.first_sector = bpb->ver_dep.v32.root_cluster;
 	}
 
 	//Check the signature
@@ -118,10 +116,14 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 	uint64_t where;
 	uint32_t entries_per_cluster_current = 0;
 
-	if (cluster==0) //We want the root dir?
-		where = fat_drive->first_root_dir_sector << fat_drive->log_bytes_per_sector; //Move to the root dir sector
-	else
+	if (cluster==ROOT_DIR_CLUSTER) {    //We want the root dir?
+		if (fat_drive->type==FAT32)     //FAT32? No prob
+			cluster = fat_drive->root_dir.first_cluster;
+		else
+			where = fat_drive->root_dir.first_sector << fat_drive->log_bytes_per_sector;
+	} else {
 		where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
+	}
 
 	while (!exit) {
 		fat_entry = (struct fat_entry *) fat_drive->read_bytes(where, sizeof(struct fat_entry));
@@ -140,8 +142,12 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 
 		print_entry_info(*fat_entry);
 
-		//No more entries in the cluster?
-		if (entries_per_cluster_current==fat_drive->entries_per_cluster) {
+		//If we are parsing the root directory on FAT16 every entry is contiguous, or
+		//are there still entries in the cluster?
+		if ((entries_per_cluster_current!=fat_drive->entries_per_cluster) ||
+			(fat_drive->type==FAT16 && cluster==ROOT_DIR_CLUSTER)) {
+			where += sizeof(struct fat_entry);
+		} else {
 			//Should we move to the next cluster?
 			if (is_eof(*fat_drive, cluster)) {    //Nope, if this is the last cluster
 				break;
@@ -150,8 +156,6 @@ void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster) {
 				where = first_sector_of_cluster(fat_drive, cluster) << fat_drive->log_bytes_per_sector;
 				entries_per_cluster_current = 0;
 			}
-		} else {
-			where += sizeof(struct fat_entry);
 		}
 	}
 }
