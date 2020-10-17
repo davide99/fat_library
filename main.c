@@ -13,7 +13,10 @@ int main() {
 	printf("LBA begin: %d\n", fatDrive.lba_begin);
 
 	fat_print_dir(&fatDrive, 0);
+	printf("\n"),
 	fat_print_dir(&fatDrive, 0xF);
+
+	printf("Free clusters %d\n", fat_get_free_clusters_count(fatDrive));
 
 	return 0;
 

@@ -18,8 +18,10 @@ struct fat_drive {
   uint32_t lba_begin;
   //From BPB
   uint8_t log_sectors_per_cluster;
+  uint16_t reserved_sectors_count;
+  uint32_t fat_size_sectors;
   //Calculated
-  enum fat_version fat_version;
+  enum fat_version type;
   uint32_t first_data_sector;
   uint32_t first_root_dir_sector;
 
@@ -28,6 +30,7 @@ struct fat_drive {
 };
 
 int fat_init(struct fat_drive *fat_drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
-void fat_print_dir(struct fat_drive *fat_drive, uint32_t first_cluster);
+void fat_print_dir(struct fat_drive *fat_drive, uint32_t cluster);
+uint32_t fat_get_free_clusters_count(struct fat_drive fat_drive);
 
 #endif

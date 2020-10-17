@@ -102,4 +102,8 @@ struct mbr_partition_entry {
 
 #define FAT_BASE_YEAR (1980)
 
+#define CLUSTER_MASK_32 (0x0FFFFFFFU)
+#define CLUSTER_EOF_16 (0xFFF8U)
+#define CLUSTER_EOF_32 (0x0FFFFFF8U)
+
 #endif
