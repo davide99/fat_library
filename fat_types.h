@@ -122,4 +122,10 @@ struct mbr_partition_entry {
 
 #define LAST_LONG_ENTRY (0x40u)
 
+/*
+ * fatgen pag. 29 says "Long names are limited to 255 char",
+ * each lfn entry contains 13 char => ceil(255/13)=20.
+ */
+#define MAX_ORDER_LFS_ENTRIES (20)
+
 #endif

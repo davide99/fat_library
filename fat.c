@@ -250,24 +250,22 @@ static void print_lfn(struct fat_drive drive, struct fat_entry entry, uint64_t w
 	uint8_t checksum, order;
 	struct fat_lfn_entry *lfn_entry;
 
-	order = 1;
 	checksum = fat_sfn_checksum(entry.name.base);
 
-	while (1) {
+	for (order = 1; order <= MAX_ORDER_LFS_ENTRIES; order++) {
 		//We move back of one entry and check if a long entry exists
 		where -= sizeof(struct fat_lfn_entry);
 		lfn_entry = (struct fat_lfn_entry *) drive.read_bytes(where, sizeof(struct fat_lfn_entry));
+
 		if (((lfn_entry->attr & ATTR_LONG_NAME_MASK)==ATTR_LONG_NAME) && (lfn_entry->checksum==checksum)) {
 			if (lfn_entry->order==order) {
 				fat_print_lfn_entry(*lfn_entry);
-				order++;
 			} else if (lfn_entry->order==(order | LAST_LONG_ENTRY)) {
 				fat_print_lfn_entry(*lfn_entry);
-				order++; //just to check at the end
-				break;
+				order = MAX_ORDER_LFS_ENTRIES + 1; //force the for to exit
 			}
 		} else {
-			break;
+			order = MAX_ORDER_LFS_ENTRIES + 1; //force the for to exit
 		}
 	}
 
