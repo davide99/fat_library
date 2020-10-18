@@ -88,8 +88,8 @@ static inline int read_BPB(struct fat_drive *drive) {
 	data_sectors_cluster = ((!bpb->total_sectors_16 ? bpb->total_sectors_32 : bpb->total_sectors_16) -
 		(drive->first_data_sector - drive->first_partition_sector)) >> drive->log_sectors_per_cluster;
 
-	if (data_sectors_cluster < 4085) {
-		goto error; //FAT12
+	if (data_sectors_cluster < 4085 || data_sectors_cluster >= 268435445) {
+		goto error; //FAT12 or exFAT
 	} else if (data_sectors_cluster < 65525) {
 		drive->type = FAT16;
 	} else {
@@ -257,7 +257,8 @@ static void print_lfn(struct fat_drive drive, struct fat_entry entry, uint64_t w
 		where -= sizeof(struct fat_lfn_entry);
 		lfn_entry = (struct fat_lfn_entry *) drive.read_bytes(where, sizeof(struct fat_lfn_entry));
 
-		if (((lfn_entry->attr & ATTR_LONG_NAME_MASK)==ATTR_LONG_NAME) && (lfn_entry->checksum==checksum)) {
+		if (((lfn_entry->attr & ATTR_LONG_NAME_MASK)==ATTR_LONG_NAME) && (lfn_entry->checksum==checksum)
+			&& (lfn_entry->type==0)) { //0=name entry
 			if (lfn_entry->order==order) {
 				fat_print_lfn_entry(*lfn_entry);
 			} else if (lfn_entry->order==(order | LAST_LONG_ENTRY)) {
