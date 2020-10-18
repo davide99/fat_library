@@ -13,8 +13,8 @@ int main() {
 
 	fat_print_dir(fatDrive, 0);
 	printf("\n");
-	fat_print_dir(fatDrive, 0xF);
-	fat_save_file(fatDrive, 2, 193082);
+	//fat_print_dir(fatDrive, 0xF);
+	//fat_save_file(fatDrive, 2, 193082);
 
 	return 0;
 

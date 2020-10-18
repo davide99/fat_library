@@ -5,16 +5,19 @@
 #define BUFFER_SIZE 16384
 uint8_t buffer[BUFFER_SIZE];
 
+#define IMAGE "../king.img"
+//#define IMAGE "../image.img"
+
 uint8_t *debug_read_bytes(uint64_t address, uint32_t bytes) {
-    FILE *f;
+	FILE *f;
 
-    if ((f = fopen("../image.img", "rb")) == NULL)
-        return NULL;
+	if ((f = fopen(IMAGE, "rb"))==NULL)
+		return NULL;
 
-    fseek(f, address, SEEK_SET);
-    if (fread(buffer, bytes, 1, f) != 1)
-        return NULL;
-    fclose(f);
+	fseek(f, address, SEEK_SET);
+	if (fread(buffer, bytes, 1, f)!=1)
+		return NULL;
+	fclose(f);
 
-    return buffer;
+	return buffer;
 }
