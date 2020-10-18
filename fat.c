@@ -10,6 +10,7 @@ static uint32_t first_sector_of_cluster(struct fat_drive drive, uint32_t cluster
 static void print_entry_info(struct fat_entry entry);
 static uint32_t find_next_cluster(struct fat_drive fat, uint32_t current_cluster);
 static int is_eof(struct fat_drive drive, uint32_t cluster);
+static void print_lfn(struct fat_drive drive, struct fat_entry entry, uint64_t where);
 
 int fat_init(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func) {
 	drive->read_bytes = read_bytes_func;
@@ -131,17 +132,18 @@ void fat_print_dir(struct fat_drive drive, uint32_t cluster) {
 		fat_entry = (struct fat_entry *) drive.read_bytes(where, sizeof(struct fat_entry));
 		entries_per_cluster_current++;
 
-		switch (fat_entry->name.base[0]) {
-			case 0xE5u: printf("Deleted file: ?%.7s.%.3s\n", fat_entry->name.base + 1, fat_entry->name.ext);
-				break;
-			case 0x00u: exit = 1;
-				continue;
-			case 0x05u: //KANJI
-				printf("File starting with 0xE5: [%c%.7s.%.3s]\n", 0xE5, fat_entry->name.base + 1, fat_entry->name.ext);
-				print_entry_info(*fat_entry);
-				break;
-			default: printf("File: [%.8s.%.3s]\n", fat_entry->name.base, fat_entry->name.ext);
-				print_entry_info(*fat_entry);
+		if (fat_entry->attr!=ATTR_LONG_NAME) {
+			switch (fat_entry->name.base[0]) {
+				case 0xE5u: break;
+				case 0x00u: exit = 1;
+					continue;
+				case 0x05u: //KANJI
+					fat_entry->name.base[0] = 0xE5u;
+				default: printf("=====================\n");
+					printf("File: [%.8s.%.3s]\n", fat_entry->name.base, fat_entry->name.ext);
+					print_entry_info(*fat_entry);
+					print_lfn(drive, *fat_entry, where);
+			}
 		}
 
 		//If we are parsing the root directory on FAT16 every entry is contiguous, or
@@ -242,4 +244,33 @@ static void print_entry_info(struct fat_entry entry) {
 	printf("  ");
 	fat_print_entry_attr(entry.attr);
 	printf("\n");
+}
+
+static void print_lfn(struct fat_drive drive, struct fat_entry entry, uint64_t where) {
+	uint8_t checksum, order;
+	struct fat_lfn_entry *lfn_entry;
+
+	order = 1;
+	checksum = fat_sfn_checksum(entry.name.base);
+
+	while (1) {
+		//We move back of one entry and check if a long entry exists
+		where -= sizeof(struct fat_lfn_entry);
+		lfn_entry = (struct fat_lfn_entry *) drive.read_bytes(where, sizeof(struct fat_lfn_entry));
+		if (((lfn_entry->attr & ATTR_LONG_NAME_MASK)==ATTR_LONG_NAME) && (lfn_entry->checksum==checksum)) {
+			if (lfn_entry->order==order) {
+				fat_print_lfn_entry(*lfn_entry);
+				order++;
+			} else if (lfn_entry->order==(order | LAST_LONG_ENTRY)) {
+				fat_print_lfn_entry(*lfn_entry);
+				order++; //just to check at the end
+				break;
+			}
+		} else {
+			break;
+		}
+	}
+
+	if (order!=1)
+		printf("\n");
 }

@@ -12,8 +12,8 @@ int main() {
 	printf("LBA begin: %d\n", fatDrive.first_partition_sector);
 
 	fat_print_dir(fatDrive, 0);
-	printf("\n");
-	//fat_print_dir(fatDrive, 0xF);
+	printf("\n+++++++++++++++++++\n");
+	fat_print_dir(fatDrive, 215);
 	//fat_save_file(fatDrive, 2, 193082);
 
 	return 0;

@@ -40,5 +40,36 @@ inline void fat_print_entry_attr(uint8_t attr) {
 	printf("Attributes: ro %d, hidden %d, system %d, volume_id %d, dir %d, archive %d, long name %d\n",
 		   (attr & ATTR_READ_ONLY)!=0, (attr & ATTR_HIDDEN)!=0, (attr & ATTR_SYSTEM)!=0,
 		   (attr & ATTR_VOLUME_ID)!=0, (attr & ATTR_DIRECTORY)!=0, (attr & ATTR_ARCHIVE)!=0,
-		   (attr & ATTR_LONG_NAME)!=0);
+		   (attr & ATTR_LONG_NAME_MASK)==ATTR_LONG_NAME); //ATTR_LONG_NAME has more than one bit set
+}
+
+void fat_print_lfn_entry(struct fat_lfn_entry entry) {
+	uint8_t c;
+
+	for (int i = 0; i < 5; i++) {
+		c = entry.name1[i] & 0xFFu;
+		if (c==0) return;
+		printf("%c", c);
+	}
+
+	for (int i = 0; i < 6; i++) {
+		c = entry.name2[i] & 0xFFu;
+		if (c==0) return;
+		printf("%c", c);
+	}
+
+	for (int i = 0; i < 2; i++) {
+		c = entry.name3[i] & 0xFFu;
+		if (c==0) return;
+		printf("%c", c);
+	}
+}
+uint8_t fat_sfn_checksum(uint8_t *name) {
+	int i;
+	uint8_t sum = 0;
+
+	for (i = 0; i < 11; i++)
+		sum = (sum << 7u) + (sum >> 1u) + *name++;
+
+	return sum;
 }

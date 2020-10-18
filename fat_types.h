@@ -82,6 +82,17 @@ struct fat_entry {
   uint32_t file_size_bytes;
 } __attribute__((packed));
 
+struct fat_lfn_entry {
+  uint8_t order;
+  uint16_t name1[5];
+  uint8_t attr;
+  uint8_t type;
+  uint8_t checksum;
+  uint16_t name2[6];
+  uint8_t padding[2];
+  uint16_t name3[2];
+} __attribute__((packed));
+
 struct mbr_partition_entry {
   uint8_t status;
   uint8_t padding1[3];
@@ -100,12 +111,18 @@ struct mbr_partition_entry {
 #define ATTR_VOLUME_ID ((uint8_t)(0x08u))
 #define ATTR_DIRECTORY ((uint8_t)(0x10u))
 #define ATTR_ARCHIVE ((uint8_t)(0x20u))
+#define ATTR_LONG_NAME_MASK ((uint8_t)(0xFFu)) //READ_ONLY | HIDDEN | SYSTEM | VOLUME_ID | DIRECTORY |ARCHIVE
 #define ATTR_LONG_NAME ((uint8_t)(0x0Fu)) //READ_ONLY | HIDDEN | SYSTEM | VOLUME_ID
 
 #define FAT_BASE_YEAR (1980)
 
-#define CLUSTER_MASK_32 (0x0FFFFFFFU)
-#define CLUSTER_EOF_16 (0xFFF8U)
-#define CLUSTER_EOF_32 (0x0FFFFFF8U)
+#define CLUSTER_MASK_32 (0x0FFFFFFFu)
+#define CLUSTER_EOF_16 (0xFFF8u)
+#define CLUSTER_EOF_32 (0x0FFFFFF8u)
+
+#define LAST_LONG_ENTRY (0x40u)
+#define LFN_SUBCOMPONENT (0)
+
+#define DEL_FILE_FIRST_CHAR 0xE5u
 
 #endif
