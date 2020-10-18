@@ -64,6 +64,7 @@ void fat_print_lfn_entry(struct fat_lfn_entry entry) {
 		printf("%c", c);
 	}
 }
+
 uint8_t fat_sfn_checksum(uint8_t *name) {
 	int i;
 	uint8_t sum = 0;

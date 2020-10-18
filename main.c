@@ -11,6 +11,7 @@ int main() {
 	printf("Block size: %d Bytes\n", 1u << fatDrive.log_bytes_per_sector);
 	printf("LBA begin: %d\n", fatDrive.first_partition_sector);
 
+	printf("\n+++++++++++++++++++\n");
 	fat_print_dir(fatDrive, 0);
 	printf("\n+++++++++++++++++++\n");
 	fat_print_dir(fatDrive, 215);

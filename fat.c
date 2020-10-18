@@ -80,8 +80,8 @@ static inline int read_BPB(struct fat_drive *drive) {
 
 	//Determine fat version, fatgen pag. 14, we need to be extra careful to avoid overflows
 	//We end up with (at most) 16+5-9+1=13 bits. However total sector is 32 bit long
-	root_dir_sectors = ((uint32_t) (bpb->root_entries_count << 5u) >> drive->log_bytes_per_sector) +
-		(((1u << drive->log_bytes_per_sector) - 1) >> drive->log_bytes_per_sector);
+	root_dir_sectors =
+		((bpb->root_entries_count << 5u) + ((1u << drive->log_bytes_per_sector) - 1)) >> drive->log_bytes_per_sector;
 
 	drive->first_data_sector = drive->root_dir.first_sector + root_dir_sectors;
 
@@ -171,7 +171,7 @@ void fat_save_file(struct fat_drive drive, uint32_t cluster, uint32_t size_bytes
 	uint32_t cluster_size_bytes;
 
 	cluster_size_bytes = 1u << (uint32_t) (drive.log_sectors_per_cluster + drive.log_bytes_per_sector);
-	f = fopen("../out.txt", "wb");
+	f = fopen("../out.pdf", "wb");
 
 	do {
 		address = first_sector_of_cluster(drive, cluster) << drive.log_bytes_per_sector;

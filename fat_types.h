@@ -121,8 +121,5 @@ struct mbr_partition_entry {
 #define CLUSTER_EOF_32 (0x0FFFFFF8u)
 
 #define LAST_LONG_ENTRY (0x40u)
-#define LFN_SUBCOMPONENT (0)
-
-#define DEL_FILE_FIRST_CHAR 0xE5u
 
 #endif
