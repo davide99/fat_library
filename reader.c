@@ -5,7 +5,7 @@
 #define BUFFER_SIZE 16384
 uint8_t buffer[BUFFER_SIZE];
 
-#define IMAGE "../king.img"
+#define IMAGE "/mnt/tmp/king4.img"
 //#define IMAGE "../image.img"
 
 uint8_t *debug_read_bytes(uint64_t address, uint32_t bytes) {

@@ -96,7 +96,7 @@ static inline int read_BPB(struct fat_drive *drive) {
 		drive->type = FAT32;
 		//On FAT32 root_dir.first_sector as previously calculated must be 0
 		//It is actually stored in the fat version dependent part of the BPB and it's the beginning of a cluster chain
-		if (drive->root_dir.first_sector)
+		if (root_dir_sectors)
 			goto error;
 		drive->root_dir.first_sector = bpb->ver_dep.v32.root_cluster;
 	}
@@ -115,7 +115,7 @@ void fat_print_dir(struct fat_drive drive, uint32_t cluster) {
 	struct fat_entry *fat_entry;
 	int exit = 0;
 	uint64_t where;
-	uint32_t entries_per_cluster_current = 0;
+	uint32_t parsed_entries_per_cluster = 0;
 
 	if (cluster==ROOT_DIR_CLUSTER) {    //We want the root dir?
 		if (drive.type==FAT16) {
@@ -130,7 +130,6 @@ void fat_print_dir(struct fat_drive drive, uint32_t cluster) {
 
 	while (!exit) {
 		fat_entry = (struct fat_entry *) drive.read_bytes(where, sizeof(struct fat_entry));
-		entries_per_cluster_current++;
 
 		if (fat_entry->attr!=ATTR_LONG_NAME) {
 			switch (fat_entry->name.base[0]) {
@@ -143,14 +142,16 @@ void fat_print_dir(struct fat_drive drive, uint32_t cluster) {
 					printf("File: [%.8s.%.3s]\n", fat_entry->name.base, fat_entry->name.ext);
 					print_entry_info(*fat_entry);
 					print_lfn(drive, *fat_entry, where);
+					fflush(stdout);
 			}
 		}
 
 		//If we are parsing the root directory on FAT16 every entry is contiguous, or
 		//are there still entries in the cluster?
-		if ((entries_per_cluster_current!=drive.entries_per_cluster) ||
+		if ((parsed_entries_per_cluster<drive.entries_per_cluster) ||
 			(drive.type==FAT16 && cluster==ROOT_DIR_CLUSTER)) {
 			where += sizeof(struct fat_entry);
+			parsed_entries_per_cluster++;
 		} else {
 			//Should we move to the next cluster?
 			if (is_eof(drive, cluster)) {    //Nope, if this is the last cluster
@@ -158,7 +159,7 @@ void fat_print_dir(struct fat_drive drive, uint32_t cluster) {
 			} else {                            //Move to the next cluster
 				cluster = find_next_cluster(drive, cluster);
 				where = first_sector_of_cluster(drive, cluster) << drive.log_bytes_per_sector;
-				entries_per_cluster_current = 0;
+				parsed_entries_per_cluster = 0;
 			}
 		}
 	}
@@ -207,6 +208,11 @@ static uint32_t find_next_cluster(struct fat_drive fat, uint32_t current_cluster
 
 	fat_sector_number = fat.first_fat_sector + (fat_offset >> fat.log_bytes_per_sector);
 	fat_entry_offset = fat_offset & ((1u << fat.log_bytes_per_sector) - 1);
+
+	if (fat.type==FAT16)
+		fat_entry_offset <<= 1u;
+	else
+		fat_entry_offset <<= 2u;
 
 	data = fat.read_bytes(((uint64_t) fat_sector_number << fat.log_bytes_per_sector) + fat_entry_offset, 4);
 
