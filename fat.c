@@ -54,7 +54,7 @@ error:
 
 static inline int read_BPB(struct fat_drive *drive) {
 	struct fat_BPB *bpb;
-	uint32_t root_dir_sectors, data_sectors_cluster;
+	uint32_t root_dir_sectors, data_sectors_cluster, fat_size_sectors;
 
 	if ((bpb = (struct fat_BPB *) drive->read_bytes(
 		drive->first_partition_sector << drive->log_bytes_per_sector,
@@ -68,15 +68,15 @@ static inline int read_BPB(struct fat_drive *drive) {
 	//Parse the BPB: save just what we need
 	//Size
 	drive->log_sectors_per_cluster = fat_log2(bpb->sectors_per_cluster);
-	drive->fat_size_sectors = (!bpb->fat_size_sectors_16 ? bpb->ver_dep.v32.fat_size_sectors_32
-														 : bpb->fat_size_sectors_16);
+	fat_size_sectors = (!bpb->fat_size_sectors_16 ? bpb->ver_dep.v32.fat_size_sectors_32
+												  : bpb->fat_size_sectors_16);
 	drive->entries_per_cluster =
 		(1u << (uint32_t) (drive->log_sectors_per_cluster + drive->log_bytes_per_sector))
 			/sizeof(struct fat_entry);
 
 	//Pointers
 	drive->first_fat_sector = drive->first_partition_sector + bpb->reserved_sectors_count;
-	drive->root_dir.first_sector = drive->first_fat_sector + drive->fat_size_sectors*bpb->number_of_fats;
+	drive->root_dir.first_sector = drive->first_fat_sector + fat_size_sectors*bpb->number_of_fats;
 
 	//Determine fat version, fatgen pag. 14, we need to be extra careful to avoid overflows
 	//We end up with (at most) 16+5-9+1=13 bits. However total sector is 32 bit long
@@ -148,7 +148,7 @@ void fat_print_dir(struct fat_drive drive, uint32_t cluster) {
 
 		//If we are parsing the root directory on FAT16 every entry is contiguous, or
 		//are there still entries in the cluster?
-		if ((parsed_entries_per_cluster<drive.entries_per_cluster) ||
+		if ((parsed_entries_per_cluster < drive.entries_per_cluster) ||
 			(drive.type==FAT16 && cluster==ROOT_DIR_CLUSTER)) {
 			where += sizeof(struct fat_entry);
 			parsed_entries_per_cluster++;

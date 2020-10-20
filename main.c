@@ -14,7 +14,7 @@ int main() {
 	printf("\n+++++++++++++++++++\n");
 	fat_print_dir(fatDrive, 0);
 	printf("\n+++++++++++++++++++\n");
-	fat_print_dir(fatDrive, 6);
+	fat_print_dir(fatDrive, 15);
 	//fat_save_file(fatDrive, 2, 193082);
 
 	return 0;

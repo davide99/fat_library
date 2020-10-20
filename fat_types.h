@@ -1,5 +1,5 @@
-#ifndef FAT_PRIV_DEFS_H
-#define FAT_PRIV_DEFS_H
+#ifndef FAT_TYPES_H
+#define FAT_TYPES_H
 
 #include <stdint.h>
 

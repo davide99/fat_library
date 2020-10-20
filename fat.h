@@ -7,7 +7,7 @@ typedef uint8_t *(*fat_read_bytes_func_t)(uint64_t address, uint32_t bytes);
 
 enum fat_version {
   FAT16, FAT32
-};
+} __attribute__ ((packed));
 
 struct fat_drive {
   enum fat_version type;
@@ -15,7 +15,6 @@ struct fat_drive {
   //Sizes
   uint8_t log_bytes_per_sector;
   uint8_t log_sectors_per_cluster;
-  uint32_t fat_size_sectors;
   uint16_t entries_per_cluster;
 
   //Pointers
