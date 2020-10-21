@@ -2,8 +2,9 @@
 #define FAT_H
 
 #include <stdint.h>
+#define BUFFER_SIZE 32
 
-typedef uint8_t *(*fat_read_bytes_func_t)(uint64_t address, uint32_t bytes);
+typedef uint8_t *(*fat_read_bytes_func_t)(uint64_t address, uint32_t bytes, uint8_t *buffer);
 
 enum fat_version {
   FAT16, FAT32
@@ -28,6 +29,9 @@ struct fat_drive {
 
   //Function pointers
   fat_read_bytes_func_t read_bytes;
+
+  //Data
+  uint8_t buffer[BUFFER_SIZE];
 };
 
 int fat_init(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);

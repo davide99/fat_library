@@ -2,13 +2,14 @@
 #include "fat_types.h"
 #include "fat_utils.h"
 #include <stdio.h>
+#include <stddef.h>
 
 //Private functions
 static int get_partition_info(struct fat_drive *drive);
 static int read_BPB(struct fat_drive *drive);
 static uint32_t first_sector_of_cluster(struct fat_drive drive, uint32_t cluster);
 static void print_entry_info(struct fat_entry entry);
-static uint32_t find_next_cluster(struct fat_drive fat, uint32_t current_cluster);
+static uint32_t find_next_cluster(struct fat_drive drive, uint32_t current_cluster);
 static int is_eof(struct fat_drive drive, uint32_t cluster);
 static void print_lfn(struct fat_drive drive, struct fat_entry entry, uint64_t where);
 
@@ -36,7 +37,8 @@ static inline int get_partition_info(struct fat_drive *drive) {
 	//Get the first entry in the partition table
 	if ((mbr_partition = (struct mbr_partition_entry *) drive->read_bytes(
 		0x1BEu,
-		sizeof(struct mbr_partition_entry)))==NULL)
+		sizeof(struct mbr_partition_entry),
+		drive->buffer))==NULL)
 		goto error;
 
 	if (mbr_partition->type!=0) {
@@ -45,7 +47,7 @@ static inline int get_partition_info(struct fat_drive *drive) {
 	}
 
 	//Check the signature
-	if (*((uint16_t *) drive->read_bytes(510, 2))!=MBR_BOOT_SIG)
+	if (*((uint16_t *) drive->read_bytes(510, 2, drive->buffer))!=MBR_BOOT_SIG)
 		goto error;
 
 error:
@@ -57,8 +59,9 @@ static inline int read_BPB(struct fat_drive *drive) {
 	uint32_t root_dir_sectors, data_sectors_cluster, fat_size_sectors;
 
 	if ((bpb = (struct fat_BPB *) drive->read_bytes(
-		drive->first_partition_sector << drive->log_bytes_per_sector,
-		sizeof(struct fat_BPB)))==NULL)
+		(drive->first_partition_sector << drive->log_bytes_per_sector) + BPB_BYTE_OFFSET__FROM_PARTITION_BEGIN,
+		sizeof(struct fat_BPB),    //Read until before ver_dep, the buffer is just 32 B
+		drive->buffer))==NULL)
 		goto error;
 
 	//Should be equal to the previous set size
@@ -68,8 +71,22 @@ static inline int read_BPB(struct fat_drive *drive) {
 	//Parse the BPB: save just what we need
 	//Size
 	drive->log_sectors_per_cluster = fat_log2(bpb->sectors_per_cluster);
-	fat_size_sectors = (!bpb->fat_size_sectors_16 ? bpb->ver_dep.v32.fat_size_sectors_32
-												  : bpb->fat_size_sectors_16);
+
+	if (bpb->fat_size_sectors_16!=0) {
+		fat_size_sectors = bpb->fat_size_sectors_16;
+	} else {
+		/*
+		 * If fat_size_sectors_16==0 we need to read fat_size_sectors_32, which
+		 * is stored in the fat version dependent BPB part.
+		 * We read it directly into the variable.
+		 */
+		drive->read_bytes(
+			(drive->first_partition_sector << drive->log_bytes_per_sector) + BPB32_BYTE_OFFEST__FAT_SIZE_SECTORS_32,
+			sizeof(uint32_t),
+			(uint8_t *) &fat_size_sectors
+		);
+	}
+
 	drive->entries_per_cluster =
 		(1u << (uint32_t) (drive->log_sectors_per_cluster + drive->log_bytes_per_sector))
 			/sizeof(struct fat_entry);
@@ -79,7 +96,7 @@ static inline int read_BPB(struct fat_drive *drive) {
 	drive->root_dir.first_sector = drive->first_fat_sector + fat_size_sectors*bpb->number_of_fats;
 
 	//Determine fat version, fatgen pag. 14, we need to be extra careful to avoid overflows
-	//We end up with (at most) 16+5-9+1=13 bits. However total sector is 32 bit long
+	//We end up with (at most) 16+5-9+1=13 bits. However total sectors is 32 bit long
 	root_dir_sectors =
 		((bpb->root_entries_count << 5u) + ((1u << drive->log_bytes_per_sector) - 1)) >> drive->log_bytes_per_sector;
 
@@ -98,11 +115,15 @@ static inline int read_BPB(struct fat_drive *drive) {
 		//It is actually stored in the fat version dependent part of the BPB and it's the beginning of a cluster chain
 		if (root_dir_sectors)
 			goto error;
-		drive->root_dir.first_sector = bpb->ver_dep.v32.root_cluster;
+		drive->read_bytes(
+			(drive->first_partition_sector << drive->log_bytes_per_sector) + BPB32_BYTE_OFFEST__ROOT_CLUSTER_32,
+			4,
+			(uint8_t *) &drive->root_dir.first_sector
+		);
 	}
 
 	//Check the signature
-	if (bpb->signature!=MBR_BOOT_SIG)
+	if ((*(uint16_t *) drive->read_bytes(510, 2, drive->buffer))!=MBR_BOOT_SIG)
 		goto error;
 
 	return 0;
@@ -129,7 +150,7 @@ void fat_print_dir(struct fat_drive drive, uint32_t cluster) {
 	}
 
 	while (!exit) {
-		fat_entry = (struct fat_entry *) drive.read_bytes(where, sizeof(struct fat_entry));
+		fat_entry = (struct fat_entry *) drive.read_bytes(where, sizeof(struct fat_entry), drive.buffer);
 
 		if (fat_entry->attr!=ATTR_LONG_NAME) {
 			switch (fat_entry->name.base[0]) {
@@ -165,7 +186,7 @@ void fat_print_dir(struct fat_drive drive, uint32_t cluster) {
 	}
 }
 
-void fat_save_file(struct fat_drive drive, uint32_t cluster, uint32_t size_bytes) {
+/*void fat_save_file(struct fat_drive drive, uint32_t cluster, uint32_t size_bytes) {
 	FILE *f;
 	uint8_t *data;
 	uint64_t address;
@@ -191,32 +212,33 @@ void fat_save_file(struct fat_drive drive, uint32_t cluster, uint32_t size_bytes
 	} while (!is_eof(drive, cluster) && size_bytes!=0);
 
 	fclose(f);
-}
+}*/
 
 static inline uint32_t first_sector_of_cluster(struct fat_drive drive, uint32_t cluster) {
 	return ((cluster - 2) << drive.log_sectors_per_cluster) + drive.first_data_sector;
 }
 
-static uint32_t find_next_cluster(struct fat_drive fat, uint32_t current_cluster) {
+static uint32_t find_next_cluster(struct fat_drive drive, uint32_t current_cluster) {
 	uint32_t fat_offset, fat_sector_number, fat_entry_offset;
 	uint8_t *data;
 
-	if (fat.type==FAT16)
+	if (drive.type==FAT16)
 		fat_offset = current_cluster << 1u;
 	else
 		fat_offset = current_cluster << 2u;
 
-	fat_sector_number = fat.first_fat_sector + (fat_offset >> fat.log_bytes_per_sector);
-	fat_entry_offset = fat_offset & ((1u << fat.log_bytes_per_sector) - 1);
+	fat_sector_number = drive.first_fat_sector + (fat_offset >> drive.log_bytes_per_sector);
+	fat_entry_offset = fat_offset & ((1u << drive.log_bytes_per_sector) - 1);
 
-	if (fat.type==FAT16)
+	if (drive.type==FAT16)
 		fat_entry_offset <<= 1u;
 	else
 		fat_entry_offset <<= 2u;
 
-	data = fat.read_bytes(((uint64_t) fat_sector_number << fat.log_bytes_per_sector) + fat_entry_offset, 4);
+	data = drive
+		.read_bytes(((uint64_t) fat_sector_number << drive.log_bytes_per_sector) + fat_entry_offset, 4, drive.buffer);
 
-	if (fat.type==FAT16)
+	if (drive.type==FAT16)
 		return *((uint16_t *) data);
 	else
 		return *((uint32_t *) data) & CLUSTER_MASK_32;
@@ -261,7 +283,7 @@ static void print_lfn(struct fat_drive drive, struct fat_entry entry, uint64_t w
 	for (order = 1; order <= MAX_ORDER_LFS_ENTRIES; order++) {
 		//We move back of one entry and check if a long entry exists
 		where -= sizeof(struct fat_lfn_entry);
-		lfn_entry = (struct fat_lfn_entry *) drive.read_bytes(where, sizeof(struct fat_lfn_entry));
+		lfn_entry = (struct fat_lfn_entry *) drive.read_bytes(where, sizeof(struct fat_lfn_entry), drive.buffer);
 
 		if (((lfn_entry->attr & ATTR_LONG_NAME_MASK)==ATTR_LONG_NAME) && (lfn_entry->checksum==checksum)
 			&& (lfn_entry->type==0)) { //0=name entry

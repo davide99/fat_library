@@ -3,49 +3,24 @@
 
 #include <stdint.h>
 
-//Bootsector and BPB
+//BPB
+#define BPB_BYTE_OFFSET__FROM_PARTITION_BEGIN (11) //sizeof(char jmp_boot[3] + char oem_name[8])
 struct fat_BPB {
-  uint8_t padding1[11];
   uint16_t bytes_per_sector;
   uint8_t sectors_per_cluster;
   uint16_t reserved_sectors_count;
   uint8_t number_of_fats;
   uint16_t root_entries_count;
   uint16_t total_sectors_16;
-  uint8_t media;
+  uint8_t unused1;		//media
   uint16_t fat_size_sectors_16;
-  uint16_t sectors_per_track;
-  uint16_t number_of_heads;
-  uint32_t hidden_sectors;
+  uint8_t unused2[8];	//sizeof(uint16_t sectors_per_track + uint16_t number_of_heads + uint32_t hidden_sectors)
   uint32_t total_sectors_32;
-  union {
-	struct {
-	  uint8_t drive_number;
-	  uint8_t reserved1;
-	  uint8_t boot_signature;
-	  uint32_t volume_id;
-	  uint8_t volume_label[11];
-	  uint8_t filesystem_type[8];
-	} __attribute__((packed)) v16;
-	struct {
-	  uint32_t fat_size_sectors_32;
-	  uint16_t extra_flags;
-	  uint16_t filesystem_version;
-	  uint32_t root_cluster;
-	  uint16_t filesystem_info_sector;
-	  uint16_t backup_boot_sector;
-	  uint8_t reserved[12];
-	  uint8_t drive_number;
-	  uint8_t reserved1;
-	  uint8_t boot_signature;
-	  uint32_t volume_id;
-	  uint8_t volume_label[11];
-	  uint8_t filesystem_type[8];
-	} __attribute__((packed)) v32;
-  } __attribute__((packed)) ver_dep;
-  uint8_t padding2[420];
-  uint16_t signature;
-} __attribute__((packed));
+} __attribute__((packed)); //25B
+
+//FAT32-specific BPB offsets
+#define BPB32_BYTE_OFFEST__FAT_SIZE_SECTORS_32 (BPB_BYTE_OFFSET__FROM_PARTITION_BEGIN + sizeof(struct fat_BPB) + 0)
+#define BPB32_BYTE_OFFEST__ROOT_CLUSTER_32 (BPB_BYTE_OFFSET__FROM_PARTITION_BEGIN + sizeof(struct fat_BPB) + 4 + 2 + 2)
 
 //FAT specific types
 struct fat_date {
