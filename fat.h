@@ -4,7 +4,7 @@
 #include <stdint.h>
 #define BUFFER_SIZE 32
 
-typedef uint8_t *(*fat_read_bytes_func_t)(uint64_t address, uint32_t bytes, uint8_t *buffer);
+typedef void *(*fat_read_bytes_func_t)(uint64_t address, uint32_t bytes, void *buffer);
 
 enum fat_version {
   FAT16, FAT32
@@ -35,8 +35,8 @@ struct fat_drive {
 };
 
 int fat_init(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
-void fat_print_dir(struct fat_drive drive, uint32_t cluster);
-void fat_save_file(struct fat_drive drive, uint32_t cluster, uint32_t size_bytes);
+void fat_print_dir(struct fat_drive *drive, uint32_t cluster);
+void fat_save_file(struct fat_drive *drive, uint32_t cluster, uint32_t size_bytes);
 
 #define ROOT_DIR_CLUSTER 0
 

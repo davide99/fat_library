@@ -4,7 +4,7 @@
 //#define IMAGE "/mnt/tmp/king4.img"
 #define IMAGE "../image.img"
 
-uint8_t *debug_read_bytes(uint64_t address, uint32_t bytes, uint8_t *buffer) {
+void *debug_read_bytes(uint64_t address, uint32_t bytes, void *buffer) {
 	FILE *f;
 
 	if ((f = fopen(IMAGE, "rb"))==NULL)
