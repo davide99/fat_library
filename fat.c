@@ -183,7 +183,15 @@ void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
 	}
 }
 
-void fat_save_file(struct fat_drive *drive, uint32_t cluster, uint32_t size_bytes, void *buffer, uint16_t buffer_len) {
+void fat_save_file(struct fat_drive *drive,
+				   //Coordinates
+				   uint32_t cluster,
+				   uint32_t in_cluster_byte_offset,
+				   //File size
+				   uint32_t size_bytes,
+				   //Buffer
+				   void *buffer,
+				   uint16_t buffer_len) {
 	FILE *f;
 	uint8_t *data;
 	uint64_t where;
