@@ -184,24 +184,21 @@ void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
 }
 
 void fat_save_file(struct fat_drive *drive,
-				   //Coordinates
+	//Coordinates
 				   uint32_t cluster,
 				   uint32_t in_cluster_byte_offset,
-				   //File size
+	//File size
 				   uint32_t size_bytes,
-				   //Buffer
+	//Buffer
 				   void *buffer,
 				   uint16_t buffer_len) {
-	FILE *f;
-	uint8_t *data;
-	uint64_t where;
-	uint32_t cluster_size_bytes;
+	uint64_t where, where_end;
+	uint32_t cluster_size_bytes = 1u << (uint32_t) (drive->log_sectors_per_cluster + drive->log_bytes_per_sector);
 
-	cluster_size_bytes = 1u << (uint32_t) (drive->log_sectors_per_cluster + drive->log_bytes_per_sector);
-	f = fopen("../out.pdf", "wb");
+	where = (first_sector_of_cluster(drive, cluster) << drive->log_bytes_per_sector) + in_cluster_byte_offset;
+	where_end = (first_sector_of_cluster(drive, cluster) << drive->log_bytes_per_sector) + cluster_size_bytes;
 
 	do {
-		where = first_sector_of_cluster(drive, cluster) << drive->log_bytes_per_sector;
 
 		if (size_bytes >= cluster_size_bytes) {
 			data = drive->read_bytes(where, cluster_size_bytes);
@@ -215,8 +212,6 @@ void fat_save_file(struct fat_drive *drive,
 
 		cluster = find_next_cluster(drive, cluster);
 	} while (!is_eof(drive, cluster) && size_bytes!=0);
-
-	fclose(f);
 }
 
 static inline uint32_t first_sector_of_cluster(struct fat_drive *drive, uint32_t cluster) {
