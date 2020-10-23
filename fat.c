@@ -2,6 +2,7 @@
 #include "fat_types.h"
 #include "fat_utils.h"
 #include <stdio.h>
+#include <string.h>
 
 //Private functions
 /*
@@ -183,35 +184,40 @@ void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
 	}
 }
 
-void fat_save_file(struct fat_drive *drive,
-	//Coordinates
-				   uint32_t cluster,
-				   uint32_t in_cluster_byte_offset,
-	//File size
-				   uint32_t size_bytes,
-	//Buffer
-				   void *buffer,
-				   uint16_t buffer_len) {
-	uint64_t where, where_end;
-	uint32_t cluster_size_bytes = 1u << (uint32_t) (drive->log_sectors_per_cluster + drive->log_bytes_per_sector);
+uintptr_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len) {
+    uint8_t *buffer_ptr;
+    uint32_t read_size, cluster_size_bytes;
+    uint64_t where;
 
-	where = (first_sector_of_cluster(drive, cluster) << drive->log_bytes_per_sector) + in_cluster_byte_offset;
-	where_end = (first_sector_of_cluster(drive, cluster) << drive->log_bytes_per_sector) + cluster_size_bytes;
+    cluster_size_bytes = 1u << (uint32_t)(drive->log_bytes_per_sector + drive->log_sectors_per_cluster);
+    buffer_ptr = buffer;
 
-	do {
+    for (
+            uint32_t cluster_offset = 0;
+            cluster_offset <= (buffer_len >> (uint32_t)(drive->log_bytes_per_sector + drive->log_sectors_per_cluster));
+            cluster_offset++)
+    {//For each cluster
+        read_size = cluster_size_bytes - file->in_cluster_byte_offset;
+        if(read_size > file->size_bytes)
+            read_size = file->size_bytes;
+        where = (first_sector_of_cluster(drive, file->cluster) << drive->log_bytes_per_sector) + file->in_cluster_byte_offset;
 
-		if (size_bytes >= cluster_size_bytes) {
-			data = drive->read_bytes(where, cluster_size_bytes);
-			fwrite(data, cluster_size_bytes, 1, f);
-			size_bytes -= cluster_size_bytes;
-		} else {
-			data = drive->read_bytes(where, size_bytes);
-			fwrite(data, size_bytes, 1, f);
-			size_bytes = 0;
-		}
+        if(read_size<=buffer_len){ //Do we have enough room?
+            drive->read_bytes(where, read_size, buffer_ptr);
+            buffer_ptr += read_size;
+            buffer_len -= read_size;
+            file->in_cluster_byte_offset = 0;
+            file->cluster = find_next_cluster(drive, file->cluster);
+        }else{ //no
+            drive->read_bytes(where, buffer_len, buffer_ptr);
+            buffer_ptr += buffer_len;
+            file->in_cluster_byte_offset = buffer_len;
+            buffer_len = 0;
+            file->cluster = find_next_cluster(drive, file->cluster);
+        }
+    }
 
-		cluster = find_next_cluster(drive, cluster);
-	} while (!is_eof(drive, cluster) && size_bytes!=0);
+    return buffer_ptr- (uint8_t*)buffer;
 }
 
 static inline uint32_t first_sector_of_cluster(struct fat_drive *drive, uint32_t cluster) {

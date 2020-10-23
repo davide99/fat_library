@@ -34,14 +34,18 @@ struct fat_drive {
   uint8_t buffer[BUFFER_SIZE];
 };
 
+struct fat_file {
+    //Coordinates
+    uint32_t cluster;
+    uint32_t in_cluster_byte_offset;
+
+    //File size
+    uint32_t size_bytes;
+};
+
 int fat_init(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
 void fat_print_dir(struct fat_drive *drive, uint32_t cluster);
-void fat_save_file(struct fat_drive *drive,
-				   uint32_t cluster,
-				   uint32_t in_cluster_byte_offset,
-				   uint32_t size_bytes,
-				   void *buffer,
-				   uint16_t buffer_len);
+uintptr_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len);
 
 #define ROOT_DIR_CLUSTER 0
 
