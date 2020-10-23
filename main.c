@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "fat.h"
 #include "reader.h"
-#define BUFFER_SIZE 512
+#define BUFFER_SIZE (16384 + 20)
 
 int main() {
 	struct fat_drive drive;

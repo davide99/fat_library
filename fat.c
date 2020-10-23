@@ -186,16 +186,15 @@ void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
 
 uintptr_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len) {
 	uint8_t *buffer_ptr;
-	uint32_t read_size, cluster_size_bytes;
+	uint32_t read_size, cluster_size_bytes, number_of_clusters;
 	uint64_t where;
 
 	cluster_size_bytes = 1u << (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster);
 	buffer_ptr = buffer;
+	number_of_clusters =
+		1 + ((buffer_len - 1) >> (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster));
 
-	for (
-		uint32_t cluster_offset = 0;
-		cluster_offset <= (buffer_len >> (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster));
-		cluster_offset++) {//For each cluster
+	for (uint32_t cluster_offset = 0; cluster_offset < number_of_clusters; cluster_offset++) {//For each cluster
 		read_size = cluster_size_bytes - file->in_cluster_byte_offset;
 		if (read_size > file->size_bytes)
 			read_size = file->size_bytes;
