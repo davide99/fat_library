@@ -185,39 +185,44 @@ void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
 }
 
 uintptr_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len) {
-    uint8_t *buffer_ptr;
-    uint32_t read_size, cluster_size_bytes;
-    uint64_t where;
+	uint8_t *buffer_ptr;
+	uint32_t read_size, cluster_size_bytes;
+	uint64_t where;
 
-    cluster_size_bytes = 1u << (uint32_t)(drive->log_bytes_per_sector + drive->log_sectors_per_cluster);
-    buffer_ptr = buffer;
+	cluster_size_bytes = 1u << (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster);
+	buffer_ptr = buffer;
 
-    for (
-            uint32_t cluster_offset = 0;
-            cluster_offset <= (buffer_len >> (uint32_t)(drive->log_bytes_per_sector + drive->log_sectors_per_cluster));
-            cluster_offset++)
-    {//For each cluster
-        read_size = cluster_size_bytes - file->in_cluster_byte_offset;
-        if(read_size > file->size_bytes)
-            read_size = file->size_bytes;
-        where = (first_sector_of_cluster(drive, file->cluster) << drive->log_bytes_per_sector) + file->in_cluster_byte_offset;
+	for (
+		uint32_t cluster_offset = 0;
+		cluster_offset <= (buffer_len >> (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster));
+		cluster_offset++) {//For each cluster
+		read_size = cluster_size_bytes - file->in_cluster_byte_offset;
+		if (read_size > file->size_bytes)
+			read_size = file->size_bytes;
+		where = (first_sector_of_cluster(drive, file->cluster) << drive->log_bytes_per_sector)
+			+ file->in_cluster_byte_offset;
 
-        if(read_size<=buffer_len){ //Do we have enough room?
-            drive->read_bytes(where, read_size, buffer_ptr);
-            buffer_ptr += read_size;
-            buffer_len -= read_size;
-            file->in_cluster_byte_offset = 0;
-            file->cluster = find_next_cluster(drive, file->cluster);
-        }else{ //no
-            drive->read_bytes(where, buffer_len, buffer_ptr);
-            buffer_ptr += buffer_len;
-            file->in_cluster_byte_offset = buffer_len;
-            buffer_len = 0;
-            file->cluster = find_next_cluster(drive, file->cluster);
-        }
-    }
+		if (read_size <= buffer_len) { //Do we have enough room?
+			drive->read_bytes(where, read_size, buffer_ptr);
+			buffer_ptr += read_size;
+			buffer_len -= read_size;
+			file->in_cluster_byte_offset += read_size;
+			file->size_bytes -= read_size;
+		} else { //no
+			drive->read_bytes(where, buffer_len, buffer_ptr);
+			buffer_ptr += buffer_len;
+			file->in_cluster_byte_offset += buffer_len;
+			file->size_bytes -= buffer_len;
+			buffer_len = 0;
+		}
 
-    return buffer_ptr- (uint8_t*)buffer;
+		if (file->in_cluster_byte_offset==cluster_size_bytes) {
+			file->cluster = find_next_cluster(drive, file->cluster);
+			file->in_cluster_byte_offset = 0;
+		}
+	}
+
+	return buffer_ptr - (uint8_t *) buffer;
 }
 
 static inline uint32_t first_sector_of_cluster(struct fat_drive *drive, uint32_t cluster) {
@@ -235,18 +240,17 @@ static uint32_t find_next_cluster(struct fat_drive *drive, uint32_t current_clus
 	fat_sector_number = drive->first_fat_sector + (fat_offset >> drive->log_bytes_per_sector);
 	fat_entry_offset = fat_offset & ((1u << drive->log_bytes_per_sector) - 1);
 
-	if (drive->type==FAT16)
-		fat_entry_offset <<= 1u;
-	else
-		fat_entry_offset <<= 2u;
+	if (drive->type==FAT16) {
+		drive->read_bytes(
+			((uint64_t) fat_sector_number << drive->log_bytes_per_sector) + fat_entry_offset, 2, drive->buffer);
 
-	drive->read_bytes(
-		((uint64_t) fat_sector_number << drive->log_bytes_per_sector) + fat_entry_offset, 4, drive->buffer);
-
-	if (drive->type==FAT16)
 		return *((uint16_t *) drive->buffer);
-	else
-		return *((uint32_t *) drive->buffer) & CLUSTER_MASK_32;
+	} else {
+		drive->read_bytes(
+			((uint64_t) fat_sector_number << drive->log_bytes_per_sector) + fat_entry_offset, 4, drive->buffer);
+
+		return (*((uint32_t *) drive->buffer)) & CLUSTER_MASK_32;
+	}
 }
 
 static inline int is_eof(struct fat_drive *drive, uint32_t cluster) {
