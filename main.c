@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include "fat.h"
 #include "reader.h"
+#define BUFFER_SIZE 512
 
 int main() {
 	struct fat_drive drive;
+	uint8_t buffer[BUFFER_SIZE];
 
 	if (fat_init(&drive, 512, debug_read_bytes))
 		goto error;
@@ -16,7 +18,6 @@ int main() {
 	printf("\n+++++++++++++++++++\n");
 	fat_print_dir(&drive, 15);
 
-	uint8_t buffer[512];
 	FILE *f = fopen("../out.txt", "wb");
 
 	struct fat_file file = {
@@ -28,7 +29,7 @@ int main() {
 	uintptr_t size;
 	int i=0;
 
-	while ((size = fat_save_file(&drive, &file, buffer, 512))!=0) {
+	while ((size = fat_save_file(&drive, &file, buffer, BUFFER_SIZE))) {
 		fwrite(buffer, size, 1, f);
 		i++;
 	}

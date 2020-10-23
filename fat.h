@@ -2,7 +2,7 @@
 #define FAT_H
 
 #include <stdint.h>
-#define BUFFER_SIZE 32
+#define FAT_BUFFER_SIZE 32
 
 typedef void *(*fat_read_bytes_func_t)(uint64_t address, uint32_t bytes, void *buffer);
 
@@ -31,7 +31,7 @@ struct fat_drive {
   fat_read_bytes_func_t read_bytes;
 
   //Data
-  uint8_t buffer[BUFFER_SIZE];
+  uint8_t buffer[FAT_BUFFER_SIZE];
 };
 
 struct fat_file {
