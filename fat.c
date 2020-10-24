@@ -1,21 +1,19 @@
 #include "fat.h"
 #include "fat_types.h"
 #include "fat_utils.h"
-#include <stdio.h>
 #include <string.h>
 
 //Private functions
-/*
- * Fat drive is passed around using always a pointer, so that the compiler
- * doesn't need to push the whole fat_drive (+ the buffer) in the stack
- */
 static int get_partition_info(fat_drive *drive);
 static int read_BPB(fat_drive *drive);
 static uint32_t first_sector_of_cluster(fat_drive *drive, uint32_t cluster);
-static void print_entry_info(struct fat_entry *entry);
 static uint32_t find_next_cluster(fat_drive *drive, uint32_t current_cluster);
 static int is_eof(fat_drive *drive, uint32_t cluster);
-static void print_lfn(fat_drive *drive, struct fat_entry entry, uint64_t where);
+static int find_entry_first_cluster(fat_drive *drive,
+									uint32_t *cluster,
+									const char *name,
+									uint16_t name_len,
+									uint32_t *size_bytes);
 
 int fat_mount(fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func) {
 	drive->read_bytes = read_bytes_func;
@@ -132,61 +130,31 @@ error:
 	return -1;
 }
 
-void fat_print_dir(fat_drive *drive, uint32_t cluster) {
-	struct fat_entry *fat_entry;
-	int exit = 0;
-	uint64_t where;
-	uint32_t parsed_entries_per_cluster = 0;
+int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
+	uint16_t i;
+	int is_last_token;
 
-	if (cluster==ROOT_DIR_CLUSTER) {    //We want the root dir?
-		if (drive->type==FAT16) {
-			where = drive->root_dir.first_sector << drive->log_bytes_per_sector;
-		} else {
-			cluster = drive->root_dir.first_cluster;
-			where = first_sector_of_cluster(drive, cluster) << drive->log_bytes_per_sector;
-		}
-	} else {
-		where = first_sector_of_cluster(drive, cluster) << drive->log_bytes_per_sector;
-	}
+	file->cluster = FAT_ROOT_DIR_CLUSTER;
+	file->in_cluster_byte_offset = 0;
 
-	while (!exit) {
-		fat_entry = drive->read_bytes(where, sizeof(struct fat_entry), drive->buffer);
+	//Skip initial separator
+	if (path[0]==FAT_PATH_SEPARATOR_1 || path[0]==FAT_PATH_SEPARATOR_2)
+		path++;
 
-		if (fat_entry->attr!=ATTR_LONG_NAME) {
-			switch (fat_entry->name.base[0]) {
-				case 0xE5u: break;
-				case 0x00u: exit = 1;
-					continue;
-				case 0x05u: //KANJI
-					fat_entry->name.base[0] = 0xE5u;
-				default: printf("=====================\n");
-					printf("File: [%.8s.%.3s]\n", fat_entry->name.base, fat_entry->name.ext);
-					print_entry_info(fat_entry);
-					print_lfn(drive, *fat_entry, where);
-					fflush(stdout);
-			}
-		}
+	do {
+		for (i = 0; path[i]!=FAT_PATH_SEPARATOR_1 && path[i]!=FAT_PATH_SEPARATOR_2 && path[i]!='\0'; i++);
+		is_last_token = (path[i]=='\0');
 
-		//If we are parsing the root directory on FAT16 every entry is contiguous, or
-		//are there still entries in the cluster?
-		if ((parsed_entries_per_cluster < drive->entries_per_cluster) ||
-			(drive->type==FAT16 && cluster==ROOT_DIR_CLUSTER)) {
-			where += sizeof(struct fat_entry);
-			parsed_entries_per_cluster++;
-		} else {
-			//Should we move to the next cluster?
-			if (is_eof(drive, cluster)) {    //Nope, if this is the last cluster
-				break;
-			} else {                            //Move to the next cluster
-				cluster = find_next_cluster(drive, cluster);
-				where = first_sector_of_cluster(drive, cluster) << drive->log_bytes_per_sector;
-				parsed_entries_per_cluster = 0;
-			}
-		}
-	}
+		if (find_entry_first_cluster(drive, &file->cluster, path, i, &file->size_bytes))
+			return -1;
+
+		path += i + 1;
+	} while (!is_last_token);
+
+	return 0;
 }
 
-uint32_t fat_save_file(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len) {
+uint32_t fat_file_read(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len) {
 	uint8_t *byte_buffer = buffer;
 	uint32_t read_size, ceil_clusters_to_read, total_byte_read, read_clusters;
 	uint64_t where;
@@ -260,57 +228,68 @@ static inline int is_eof(fat_drive *drive, uint32_t cluster) {
 		return (cluster >= CLUSTER_EOF_32);
 }
 
-static void print_entry_info(struct fat_entry *entry) {
-	printf("  Modified: ");
-	fat_print_date(entry->write.date);
-	printf(" ");
-	fat_print_time(entry->write.time);
-	printf("    Start: %d    Size: %d\n",
-		   fat_make_dword(entry->first_cluster_high, entry->first_cluster_low), entry->file_size_bytes);
+int find_entry_first_cluster(fat_drive *drive,
+							 uint32_t *cluster,
+							 const char *name,
+							 uint16_t name_len,
+							 uint32_t *size_bytes) {
+	struct fat_entry *fat_entry;
+	uint64_t where;
+	uint32_t parsed_entries_per_cluster = 0;
 
-	printf("  Created: ");
-	fat_print_date(entry->creation.date);
-	printf(" ");
-	fat_print_time_tenth(entry->creation.time, entry->creation.time_tenth_of_secs);
-	printf("\n");
-
-	printf("  Last access: ");
-	fat_print_date(entry->last_access_date);
-	printf("\n");
-
-	printf("  ");
-	fat_print_entry_attr(entry->attr);
-	printf("\n");
-}
-
-static void print_lfn(fat_drive *drive, struct fat_entry entry, uint64_t where) {
-	uint8_t checksum, order;
-	struct fat_lfn_entry *lfn_entry;
-
-	checksum = fat_sfn_checksum(entry.name.base);
-
-	for (order = 1; order <= MAX_ORDER_LFS_ENTRIES; order++) {
-		//We move back of one entry and check if a long entry exists
-		where -= sizeof(struct fat_lfn_entry);
-		lfn_entry = drive->read_bytes(where, sizeof(struct fat_lfn_entry), drive->buffer);
-
-		if (((lfn_entry->attr & ATTR_LONG_NAME_MASK)==ATTR_LONG_NAME) && (lfn_entry->checksum==checksum)
-			&& (lfn_entry->type==0)) { //0=name entry
-			if (lfn_entry->order==order) {
-				fat_print_lfn_entry(*lfn_entry);
-			} else if (lfn_entry->order==(order | LAST_LONG_ENTRY)) {
-				fat_print_lfn_entry(*lfn_entry);
-				order = MAX_ORDER_LFS_ENTRIES + 1; //force the for to exit
-			}
+	if (*cluster==FAT_ROOT_DIR_CLUSTER) {    //We want the root dir?
+		if (drive->type==FAT16) {
+			where = drive->root_dir.first_sector << drive->log_bytes_per_sector;
 		} else {
-			order = MAX_ORDER_LFS_ENTRIES + 1; //force the for to exit
+			*cluster = drive->root_dir.first_cluster;
+			where = first_sector_of_cluster(drive, *cluster) << drive->log_bytes_per_sector;
+		}
+	} else {
+		where = first_sector_of_cluster(drive, *cluster) << drive->log_bytes_per_sector;
+	}
+
+	while (1) {
+		fat_entry = drive->read_bytes(where, sizeof(struct fat_entry), drive->buffer);
+
+		if (fat_entry->attr!=ATTR_LONG_NAME && fat_entry->name.whole[0]!=0xE5) { //No LFN & deleted entries
+			if (fat_entry->name.whole[0]==0x00u) {
+				goto not_found;
+			} else {
+				if (fat_entry->name.whole[0]==0x05u)
+					fat_entry->name.whole[0] = 0xE5u;
+
+				if (fat_entry_ascii_name_equals(*fat_entry, name, name_len)) { //Found
+					*cluster = fat_make_dword(fat_entry->first_cluster_high, fat_entry->first_cluster_low);
+					*size_bytes = fat_entry->file_size_bytes;
+					return 0;
+				}
+			}
+		}
+
+		//If we are parsing the root directory on FAT16 every entry is contiguous, or
+		//are there still entries in the cluster?
+		if ((parsed_entries_per_cluster < drive->entries_per_cluster) ||
+			(drive->type==FAT16 && cluster==FAT_ROOT_DIR_CLUSTER)) {
+			where += sizeof(struct fat_entry);
+			parsed_entries_per_cluster++;
+		} else {
+			//Should we move to the next cluster?
+			if (is_eof(drive, *cluster)) {    //Nope, if this is the last cluster
+				goto not_found;
+			} else {                            //Move to the next cluster
+				*cluster = find_next_cluster(drive, *cluster);
+				where = first_sector_of_cluster(drive, *cluster) << drive->log_bytes_per_sector;
+				parsed_entries_per_cluster = 0;
+			}
 		}
 	}
 
-	if (order!=1)
-		printf("\n");
+not_found:
+	return -1;
 }
 
 const struct m_fat fat = {
-	.mount = fat_mount
+	.mount = fat_mount,
+	.file_open = fat_file_open,
+	.file_read = fat_file_read
 };

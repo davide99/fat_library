@@ -51,13 +51,14 @@ typedef struct {
 
 struct m_fat {
   int (*mount)(fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
+  int (*file_open)(fat_drive *drive, const char *path, fat_file *file);
+  uint32_t (*file_read)(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len);
 };
 
 extern const struct m_fat fat;
 
-void fat_print_dir(fat_drive *drive, uint32_t cluster);
-uint32_t fat_save_file(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len);
-
-#define ROOT_DIR_CLUSTER 0
+#define FAT_ROOT_DIR_CLUSTER 0
+#define FAT_PATH_SEPARATOR_1 '\\'
+#define FAT_PATH_SEPARATOR_2 '/'
 
 #endif

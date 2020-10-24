@@ -4,6 +4,9 @@
 #define BUFFER_SIZE (16384 + 20)
 
 int main() {
+	FILE *f;
+	uint32_t size;
+	fat_file file;
 	fat_drive drive;
 	uint8_t buffer[BUFFER_SIZE];
 
@@ -13,25 +16,27 @@ int main() {
 	printf("Block size: %d Bytes\n", 1u << drive.log_bytes_per_sector);
 	printf("LBA begin: %d\n", drive.first_partition_sector);
 
-	printf("\n+++++++++++++++++++\n");
-	fat_print_dir(&drive, 0);
-	printf("\n+++++++++++++++++++\n");
-	fat_print_dir(&drive, 15);
+	{ //Save hamlet
+		f = fopen("../hamlet.txt", "wb");
+		if (fat.file_open(&drive, "/hamlet.txt", &file))
+			goto error;
 
-	FILE *f = fopen("../out.txt", "wb");
+		while ((size = fat.file_read(&drive, &file, buffer, BUFFER_SIZE)))
+			fwrite(buffer, size, 1, f);
 
-	fat_file file = {
-		.cluster = 2,
-		.in_cluster_byte_offset=0,
-		.size_bytes=193082
-	};
+		fclose(f);
+	}
 
-	uint32_t size;
+	{ //Save 1.txt
+		f = fopen("../1.txt", "wb");
+		if (fat.file_open(&drive, "/subdir/1.txt", &file))
+			goto error;
 
-	while ((size = fat_save_file(&drive, &file, buffer, BUFFER_SIZE)))
-		fwrite(buffer, size, 1, f);
+		while ((size = fat.file_read(&drive, &file, buffer, BUFFER_SIZE)))
+			fwrite(buffer, size, 1, f);
 
-	fclose(f);
+		fclose(f);
+	}
 
 	return 0;
 
