@@ -7,7 +7,7 @@ int main() {
 	struct fat_drive drive;
 	uint8_t buffer[BUFFER_SIZE];
 
-	if (fat_init(&drive, 512, debug_read_bytes))
+	if (fat_mount(&drive, 512, debug_read_bytes))
 		goto error;
 
 	printf("Block size: %d Bytes\n", 1u << drive.log_bytes_per_sector);

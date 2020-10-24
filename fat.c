@@ -17,7 +17,7 @@ static uint32_t find_next_cluster(struct fat_drive *drive, uint32_t current_clus
 static int is_eof(struct fat_drive *drive, uint32_t cluster);
 static void print_lfn(struct fat_drive *drive, struct fat_entry entry, uint64_t where);
 
-int fat_init(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func) {
+int fat_mount(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func) {
 	drive->read_bytes = read_bytes_func;
 
 	if (get_partition_info(drive))
@@ -88,6 +88,8 @@ static inline int read_BPB(struct fat_drive *drive) {
 
 	drive->entries_per_cluster =
 		(1u << (uint32_t) (drive->log_sectors_per_cluster + drive->log_bytes_per_sector))/sizeof(struct fat_entry);
+
+	drive->cluster_size_bytes = 1u << (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster);
 
 	//Pointers
 	drive->first_fat_sector = drive->first_partition_sector + bpb->reserved_sectors_count;
@@ -185,40 +187,36 @@ void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
 }
 
 uint32_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len) {
-	uint8_t *byte_buffer;
-	uint32_t read_size, cluster_size_bytes, ceil_number_of_clusters, total_byte_read;
+	uint8_t *byte_buffer = buffer;
+	uint32_t read_size, ceil_clusters_to_read, total_byte_read, read_clusters;
 	uint64_t where;
 
-	total_byte_read = 0;
-	byte_buffer = buffer;
-	cluster_size_bytes = 1u << (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster);
-	ceil_number_of_clusters =
+	total_byte_read = 0; //Byte that we actually read
+
+	//https://stackoverflow.com/a/2745086/6441490
+	ceil_clusters_to_read =
 		1 + ((buffer_len - 1) >> (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster));
 
-	for (uint32_t cluster_offset = 0; cluster_offset < ceil_number_of_clusters; cluster_offset++) {//For each cluster
-		read_size = cluster_size_bytes - file->in_cluster_byte_offset;
+	//Do the data we read span more clusters?
+	for (read_clusters = 0; read_clusters < ceil_clusters_to_read && !is_eof(drive, file->cluster); read_clusters++) {
+		read_size = drive->cluster_size_bytes - file->in_cluster_byte_offset; //Bytes till the end of the cluster
 		if (read_size > file->size_bytes)
 			read_size = file->size_bytes;
+
 		where = (first_sector_of_cluster(drive, file->cluster) << drive->log_bytes_per_sector)
 			+ file->in_cluster_byte_offset;
 
-		if (read_size <= buffer_len) { //Do we have enough room?
-			drive->read_bytes(where, read_size, byte_buffer);
-			byte_buffer += read_size;
-			file->in_cluster_byte_offset += read_size;
-			file->size_bytes -= read_size;
-			total_byte_read += read_size;
-			buffer_len -= read_size;
-		} else { //no
-			drive->read_bytes(where, buffer_len, byte_buffer);
-			byte_buffer += buffer_len;
-			file->in_cluster_byte_offset += buffer_len;
-			file->size_bytes -= buffer_len;
-			total_byte_read += buffer_len;
-			buffer_len = 0;
-		}
+		if (read_size > buffer_len) //Do we have enough room in the buffer?
+			read_size = buffer_len;
 
-		if (file->in_cluster_byte_offset==cluster_size_bytes) {
+		drive->read_bytes(where, read_size, byte_buffer);
+		byte_buffer += read_size; //Move the buffer pointer forward
+		file->in_cluster_byte_offset += read_size;
+		file->size_bytes -= read_size; //Remaining file size
+		total_byte_read += read_size;
+		buffer_len -= read_size;
+
+		if (file->in_cluster_byte_offset==drive->cluster_size_bytes) { //Go to the next cluster?
 			file->cluster = find_next_cluster(drive, file->cluster);
 			file->in_cluster_byte_offset = 0;
 		}
