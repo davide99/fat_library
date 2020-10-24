@@ -9,15 +9,15 @@
  * Fat drive is passed around using always a pointer, so that the compiler
  * doesn't need to push the whole fat_drive (+ the buffer) in the stack
  */
-static int get_partition_info(struct fat_drive *drive);
-static int read_BPB(struct fat_drive *drive);
-static uint32_t first_sector_of_cluster(struct fat_drive *drive, uint32_t cluster);
+static int get_partition_info(fat_drive *drive);
+static int read_BPB(fat_drive *drive);
+static uint32_t first_sector_of_cluster(fat_drive *drive, uint32_t cluster);
 static void print_entry_info(struct fat_entry *entry);
-static uint32_t find_next_cluster(struct fat_drive *drive, uint32_t current_cluster);
-static int is_eof(struct fat_drive *drive, uint32_t cluster);
-static void print_lfn(struct fat_drive *drive, struct fat_entry entry, uint64_t where);
+static uint32_t find_next_cluster(fat_drive *drive, uint32_t current_cluster);
+static int is_eof(fat_drive *drive, uint32_t cluster);
+static void print_lfn(fat_drive *drive, struct fat_entry entry, uint64_t where);
 
-int fat_mount(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func) {
+int fat_mount(fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func) {
 	drive->read_bytes = read_bytes_func;
 
 	if (get_partition_info(drive))
@@ -35,7 +35,7 @@ error:
 	return -1;
 }
 
-static inline int get_partition_info(struct fat_drive *drive) {
+static inline int get_partition_info(fat_drive *drive) {
 	struct mbr_partition_entry *mbr_partition;
 
 	//Get the first entry in the partition table
@@ -55,7 +55,7 @@ error:
 	return -1;
 }
 
-static inline int read_BPB(struct fat_drive *drive) {
+static inline int read_BPB(fat_drive *drive) {
 	struct fat_BPB *bpb;
 	uint32_t root_dir_sectors, data_sectors_cluster, fat_size_sectors;
 
@@ -132,7 +132,7 @@ error:
 	return -1;
 }
 
-void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
+void fat_print_dir(fat_drive *drive, uint32_t cluster) {
 	struct fat_entry *fat_entry;
 	int exit = 0;
 	uint64_t where;
@@ -186,7 +186,7 @@ void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
 	}
 }
 
-uint32_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len) {
+uint32_t fat_save_file(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len) {
 	uint8_t *byte_buffer = buffer;
 	uint32_t read_size, ceil_clusters_to_read, total_byte_read, read_clusters;
 	uint64_t where;
@@ -225,11 +225,11 @@ uint32_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buf
 	return total_byte_read;
 }
 
-static inline uint32_t first_sector_of_cluster(struct fat_drive *drive, uint32_t cluster) {
+static inline uint32_t first_sector_of_cluster(fat_drive *drive, uint32_t cluster) {
 	return ((cluster - 2) << drive->log_sectors_per_cluster) + drive->first_data_sector;
 }
 
-static uint32_t find_next_cluster(struct fat_drive *drive, uint32_t current_cluster) {
+static uint32_t find_next_cluster(fat_drive *drive, uint32_t current_cluster) {
 	uint32_t fat_offset, fat_sector_number, fat_entry_offset;
 
 	if (drive->type==FAT16)
@@ -253,7 +253,7 @@ static uint32_t find_next_cluster(struct fat_drive *drive, uint32_t current_clus
 	}
 }
 
-static inline int is_eof(struct fat_drive *drive, uint32_t cluster) {
+static inline int is_eof(fat_drive *drive, uint32_t cluster) {
 	if (drive->type==FAT16)
 		return (cluster >= CLUSTER_EOF_16);
 	else
@@ -283,7 +283,7 @@ static void print_entry_info(struct fat_entry *entry) {
 	printf("\n");
 }
 
-static void print_lfn(struct fat_drive *drive, struct fat_entry entry, uint64_t where) {
+static void print_lfn(fat_drive *drive, struct fat_entry entry, uint64_t where) {
 	uint8_t checksum, order;
 	struct fat_lfn_entry *lfn_entry;
 
@@ -310,3 +310,7 @@ static void print_lfn(struct fat_drive *drive, struct fat_entry entry, uint64_t 
 	if (order!=1)
 		printf("\n");
 }
+
+const struct m_fat fat = {
+	.mount = fat_mount
+};

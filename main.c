@@ -4,10 +4,10 @@
 #define BUFFER_SIZE (16384 + 20)
 
 int main() {
-	struct fat_drive drive;
+	fat_drive drive;
 	uint8_t buffer[BUFFER_SIZE];
 
-	if (fat_mount(&drive, 512, debug_read_bytes))
+	if (fat.mount(&drive, 512, debug_read_bytes))
 		goto error;
 
 	printf("Block size: %d Bytes\n", 1u << drive.log_bytes_per_sector);
@@ -20,7 +20,7 @@ int main() {
 
 	FILE *f = fopen("../out.txt", "wb");
 
-	struct fat_file file = {
+	fat_file file = {
 		.cluster = 2,
 		.in_cluster_byte_offset=0,
 		.size_bytes=193082

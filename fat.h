@@ -10,7 +10,12 @@ enum fat_version {
   FAT16, FAT32
 } __attribute__ ((packed));
 
-struct fat_drive {
+/*
+ * The structs are typedefed since the user is not meant to directly
+ * write into them
+ */
+
+typedef struct {
   enum fat_version type;
 
   //Sizes
@@ -33,20 +38,25 @@ struct fat_drive {
 
   //Data
   uint8_t buffer[FAT_BUFFER_SIZE];
-} __attribute__ ((packed));
+} __attribute__ ((packed)) fat_drive;
 
-struct fat_file {
+typedef struct {
   //Coordinates
   uint32_t cluster;
   uint32_t in_cluster_byte_offset;
 
   //File size
   uint32_t size_bytes;
+} fat_file;
+
+struct m_fat {
+  int (*mount)(fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
 };
 
-int fat_mount(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
-void fat_print_dir(struct fat_drive *drive, uint32_t cluster);
-uint32_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len);
+extern const struct m_fat fat;
+
+void fat_print_dir(fat_drive *drive, uint32_t cluster);
+uint32_t fat_save_file(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len);
 
 #define ROOT_DIR_CLUSTER 0
 
