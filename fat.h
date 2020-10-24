@@ -49,16 +49,20 @@ typedef struct {
   uint32_t size_bytes;
 } fat_file;
 
+typedef struct {
+	uint32_t cluster;
+} fat_dir;
+
 struct m_fat {
   int (*mount)(fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
   int (*file_open)(fat_drive *drive, const char *path, fat_file *file);
+  int (*file_open_in_dir)(fat_drive *drive, fat_dir *dir, const char *filename, fat_file *file);
   uint32_t (*file_read)(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len);
+
+  void (*dir_get_root)(fat_dir *dir);
+  int (*dir_change)(fat_drive *drive, fat_dir *dir, const char *dir_name);
 };
 
 extern const struct m_fat fat;
-
-#define FAT_ROOT_DIR_CLUSTER 0
-#define FAT_PATH_SEPARATOR_1 '\\'
-#define FAT_PATH_SEPARATOR_2 '/'
 
 #endif

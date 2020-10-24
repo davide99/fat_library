@@ -9,11 +9,7 @@ static int read_BPB(fat_drive *drive);
 static uint32_t first_sector_of_cluster(fat_drive *drive, uint32_t cluster);
 static uint32_t find_next_cluster(fat_drive *drive, uint32_t current_cluster);
 static int is_eof(fat_drive *drive, uint32_t cluster);
-static int find_entry_first_cluster(fat_drive *drive,
-									uint32_t *cluster,
-									const char *name,
-									uint16_t name_len,
-									uint32_t *size_bytes);
+static int get_entry(fat_drive *drive, fat_dir dir, void *entry, int is_entry_dir, const char *entry_name);
 
 int fat_mount(fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func) {
 	drive->read_bytes = read_bytes_func;
@@ -130,30 +126,6 @@ error:
 	return -1;
 }
 
-int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
-	uint16_t i;
-	int is_last_token;
-
-	file->cluster = FAT_ROOT_DIR_CLUSTER;
-	file->in_cluster_byte_offset = 0;
-
-	//Skip initial separator
-	if (path[0]==FAT_PATH_SEPARATOR_1 || path[0]==FAT_PATH_SEPARATOR_2)
-		path++;
-
-	do {
-		for (i = 0; path[i]!=FAT_PATH_SEPARATOR_1 && path[i]!=FAT_PATH_SEPARATOR_2 && path[i]!='\0'; i++);
-		is_last_token = (path[i]=='\0');
-
-		if (find_entry_first_cluster(drive, &file->cluster, path, i, &file->size_bytes))
-			return -1;
-
-		path += i + 1;
-	} while (!is_last_token);
-
-	return 0;
-}
-
 uint32_t fat_file_read(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len) {
 	uint8_t *byte_buffer = buffer;
 	uint32_t read_size, ceil_clusters_to_read, total_byte_read, read_clusters;
@@ -228,24 +200,24 @@ static inline int is_eof(fat_drive *drive, uint32_t cluster) {
 		return (cluster >= CLUSTER_EOF_32);
 }
 
-int find_entry_first_cluster(fat_drive *drive,
-							 uint32_t *cluster,
-							 const char *name,
-							 uint16_t name_len,
-							 uint32_t *size_bytes) {
+void fat_dir_get_root(fat_dir *dir) {
+	dir->cluster = FAT_ROOT_DIR_CLUSTER;
+}
+
+int get_entry(fat_drive *drive, fat_dir dir, void *entry, int is_entry_dir, const char *entry_name) {
 	struct fat_entry *fat_entry;
 	uint64_t where;
 	uint32_t parsed_entries_per_cluster = 0;
 
-	if (*cluster==FAT_ROOT_DIR_CLUSTER) {    //We want the root dir?
+	if (dir.cluster==FAT_ROOT_DIR_CLUSTER) {    //Are we in the root dir?
 		if (drive->type==FAT16) {
 			where = drive->root_dir.first_sector << drive->log_bytes_per_sector;
 		} else {
-			*cluster = drive->root_dir.first_cluster;
-			where = first_sector_of_cluster(drive, *cluster) << drive->log_bytes_per_sector;
+			dir.cluster = drive->root_dir.first_cluster;
+			where = first_sector_of_cluster(drive, dir.cluster) << drive->log_bytes_per_sector;
 		}
 	} else {
-		where = first_sector_of_cluster(drive, *cluster) << drive->log_bytes_per_sector;
+		where = first_sector_of_cluster(drive, dir.cluster) << drive->log_bytes_per_sector;
 	}
 
 	while (1) {
@@ -258,9 +230,15 @@ int find_entry_first_cluster(fat_drive *drive,
 				if (fat_entry->name.whole[0]==0x05u)
 					fat_entry->name.whole[0] = 0xE5u;
 
-				if (fat_entry_ascii_name_equals(*fat_entry, name, name_len)) { //Found
-					*cluster = fat_make_dword(fat_entry->first_cluster_high, fat_entry->first_cluster_low);
-					*size_bytes = fat_entry->file_size_bytes;
+				if (fat_entry_ascii_name_equals(*fat_entry, entry_name)) { //Found
+					if (is_entry_dir) {
+						((fat_dir *) entry)->cluster =
+							fat_make_dword(fat_entry->first_cluster_high, fat_entry->first_cluster_low);
+					} else {
+						((fat_file *) entry)->cluster =
+							fat_make_dword(fat_entry->first_cluster_high, fat_entry->first_cluster_low);
+						((fat_file *) entry)->size_bytes = fat_entry->file_size_bytes;
+					}
 					return 0;
 				}
 			}
@@ -269,16 +247,16 @@ int find_entry_first_cluster(fat_drive *drive,
 		//If we are parsing the root directory on FAT16 every entry is contiguous, or
 		//are there still entries in the cluster?
 		if ((parsed_entries_per_cluster < drive->entries_per_cluster) ||
-			(drive->type==FAT16 && cluster==FAT_ROOT_DIR_CLUSTER)) {
+			(drive->type==FAT16 && dir.cluster==FAT_ROOT_DIR_CLUSTER)) {
 			where += sizeof(struct fat_entry);
 			parsed_entries_per_cluster++;
 		} else {
 			//Should we move to the next cluster?
-			if (is_eof(drive, *cluster)) {    //Nope, if this is the last cluster
+			if (is_eof(drive, dir.cluster)) { //Nope, if this is the last cluster
 				goto not_found;
-			} else {                            //Move to the next cluster
-				*cluster = find_next_cluster(drive, *cluster);
-				where = first_sector_of_cluster(drive, *cluster) << drive->log_bytes_per_sector;
+			} else { //Move to the next cluster
+				dir.cluster = find_next_cluster(drive, dir.cluster);
+				where = first_sector_of_cluster(drive, dir.cluster) << drive->log_bytes_per_sector;
 				parsed_entries_per_cluster = 0;
 			}
 		}
@@ -288,8 +266,41 @@ not_found:
 	return -1;
 }
 
+int fat_dir_change(fat_drive *drive, fat_dir *dir, const char *dir_name) {
+	if (dir_name[0]=='.' && dir_name[1]=='\0') //same dir?
+		return 1;
+
+	return get_entry(drive, *dir, dir, 1, dir_name);
+}
+
+int fat_file_open_in_dir(fat_drive *drive, fat_dir *dir, const char *filename, fat_file *file) {
+	file->in_cluster_byte_offset = 0;
+	return get_entry(drive, *dir, file, 0, filename);
+}
+
+int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
+	char buffer[12];
+	int is_last;
+	fat_dir dir;
+
+	fat_dir_get_root(&dir);
+
+	while (1) {
+		path += fat_split_path(path, buffer, &is_last);
+		if (is_last)
+			break;
+		fat_dir_change(drive, &dir, buffer);
+	}
+
+	return fat_file_open_in_dir(drive, &dir, buffer, file);
+}
+
 const struct m_fat fat = {
 	.mount = fat_mount,
 	.file_open = fat_file_open,
-	.file_read = fat_file_read
+	.file_open_in_dir = fat_file_open_in_dir,
+	.file_read = fat_file_read,
+
+	.dir_get_root = fat_dir_get_root,
+	.dir_change = fat_dir_change
 };

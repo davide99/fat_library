@@ -106,4 +106,10 @@ struct mbr_partition_entry {
  */
 #define MAX_ORDER_LFS_ENTRIES (20)
 
+#define FAT_ROOT_DIR_CLUSTER 0
+#define FAT_PATH_SEPARATOR_1 '\\'
+#define FAT_PATH_SEPARATOR_2 '/'
+#define FAT_PARENT_DIR_NAME "..         "
+#define FAT_CURRENT_DIR_NAME ".          "
+
 #endif

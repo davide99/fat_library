@@ -16,9 +16,15 @@ int main() {
 	printf("Block size: %d Bytes\n", 1u << drive.log_bytes_per_sector);
 	printf("LBA begin: %d\n", drive.first_partition_sector);
 
-	{ //Save hamlet
+	{ //Save hamlet.txt, incremental dir change
+		fat_dir cd;
+		fat.dir_get_root(&cd);
+		fat.dir_change(&drive, &cd, "subdir");
+		fat.dir_change(&drive, &cd, "..");
+		fat.dir_change(&drive, &cd, ".");
+
 		f = fopen("../hamlet.txt", "wb");
-		if (fat.file_open(&drive, "/hamlet.txt", &file))
+		if (fat.file_open_in_dir(&drive, &cd, "hamlet.txt", &file))
 			goto error;
 
 		while ((size = fat.file_read(&drive, &file, buffer, BUFFER_SIZE)))
