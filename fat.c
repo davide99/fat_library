@@ -279,7 +279,7 @@ int fat_file_open_in_dir(fat_drive *drive, fat_dir *dir, const char *filename, f
 }
 
 int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
-	char buffer[12];
+	char buffer[13];
 	int is_last;
 	fat_dir dir;
 
