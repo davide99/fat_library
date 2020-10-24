@@ -45,7 +45,7 @@ struct fat_file {
 
 int fat_init(struct fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
 void fat_print_dir(struct fat_drive *drive, uint32_t cluster);
-uintptr_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len);
+uint32_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len);
 
 #define ROOT_DIR_CLUSTER 0
 

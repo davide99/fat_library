@@ -26,13 +26,10 @@ int main() {
 		.size_bytes=193082
 	};
 
-	uintptr_t size;
-	int i=0;
+	uint32_t size;
 
-	while ((size = fat_save_file(&drive, &file, buffer, BUFFER_SIZE))) {
+	while ((size = fat_save_file(&drive, &file, buffer, BUFFER_SIZE)))
 		fwrite(buffer, size, 1, f);
-		i++;
-	}
 
 	fclose(f);
 

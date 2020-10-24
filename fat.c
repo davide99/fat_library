@@ -184,17 +184,18 @@ void fat_print_dir(struct fat_drive *drive, uint32_t cluster) {
 	}
 }
 
-uintptr_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len) {
-	uint8_t *buffer_ptr;
-	uint32_t read_size, cluster_size_bytes, number_of_clusters;
+uint32_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *buffer, uint32_t buffer_len) {
+	uint8_t *byte_buffer;
+	uint32_t read_size, cluster_size_bytes, ceil_number_of_clusters, total_byte_read;
 	uint64_t where;
 
+	total_byte_read = 0;
+	byte_buffer = buffer;
 	cluster_size_bytes = 1u << (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster);
-	buffer_ptr = buffer;
-	number_of_clusters =
+	ceil_number_of_clusters =
 		1 + ((buffer_len - 1) >> (uint32_t) (drive->log_bytes_per_sector + drive->log_sectors_per_cluster));
 
-	for (uint32_t cluster_offset = 0; cluster_offset < number_of_clusters; cluster_offset++) {//For each cluster
+	for (uint32_t cluster_offset = 0; cluster_offset < ceil_number_of_clusters; cluster_offset++) {//For each cluster
 		read_size = cluster_size_bytes - file->in_cluster_byte_offset;
 		if (read_size > file->size_bytes)
 			read_size = file->size_bytes;
@@ -202,16 +203,18 @@ uintptr_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *bu
 			+ file->in_cluster_byte_offset;
 
 		if (read_size <= buffer_len) { //Do we have enough room?
-			drive->read_bytes(where, read_size, buffer_ptr);
-			buffer_ptr += read_size;
-			buffer_len -= read_size;
+			drive->read_bytes(where, read_size, byte_buffer);
+			byte_buffer += read_size;
 			file->in_cluster_byte_offset += read_size;
 			file->size_bytes -= read_size;
+			total_byte_read += read_size;
+			buffer_len -= read_size;
 		} else { //no
-			drive->read_bytes(where, buffer_len, buffer_ptr);
-			buffer_ptr += buffer_len;
+			drive->read_bytes(where, buffer_len, byte_buffer);
+			byte_buffer += buffer_len;
 			file->in_cluster_byte_offset += buffer_len;
 			file->size_bytes -= buffer_len;
+			total_byte_read += buffer_len;
 			buffer_len = 0;
 		}
 
@@ -221,7 +224,7 @@ uintptr_t fat_save_file(struct fat_drive *drive, struct fat_file *file, void *bu
 		}
 	}
 
-	return buffer_ptr - (uint8_t *) buffer;
+	return total_byte_read;
 }
 
 static inline uint32_t first_sector_of_cluster(struct fat_drive *drive, uint32_t cluster) {
