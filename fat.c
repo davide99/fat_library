@@ -318,9 +318,9 @@ int fat_list_get_next_entry_in_dir(fat_drive *drive, fat_dir *current_dir, fat_l
 		fat_file_read(drive, &list_entry->next_entry, &e, FAT_BUFFER_SIZE);
 	}
 
-	if(e.name.whole[0]==0){
+	if (e.name.whole[0]==0) {
 		return 0;
-	} else{
+	} else {
 		memcpy(list_entry->name, e.name.whole, 11);
 		list_entry->next_entry.size_bytes = sizeof(struct fat_entry);
 		return 1;

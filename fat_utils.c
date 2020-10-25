@@ -15,16 +15,6 @@ inline uint32_t fat_make_dword(uint16_t high, uint16_t low) {
 	return ((uint32_t) high << 16u) | low;
 }
 
-uint8_t fat_sfn_checksum(uint8_t *name) {
-	int i;
-	uint8_t sum = 0;
-
-	for (i = 0; i < 11; i++)
-		sum = (sum << 7u) + (sum >> 1u) + *name++;
-
-	return sum;
-}
-
 inline char fat_ascii_to_upper(char c) {
 	if (c >= 'a' && c <= 'z')
 		return (char) (c - 0x20);
@@ -71,10 +61,11 @@ int fat_split_path(const char *path, char *buffer, int *is_last) {
 		return 0;
 	}
 
-	if (path[0]==FAT_PATH_SEPARATOR_1 || path[1]==FAT_PATH_SEPARATOR_2)
-		i = 0;
-	else
+	//Skip initial \ or /
+	if (path[0]==FAT_PATH_SEPARATOR_1 || path[0]==FAT_PATH_SEPARATOR_2)
 		i = 1;
+	else
+		i = 0;
 
 	for (j = 0; path[i]!=FAT_PATH_SEPARATOR_1 && path[i]!=FAT_PATH_SEPARATOR_2 && path[i]!='\0'; i++, j++)
 		buffer[j] = path[i];
