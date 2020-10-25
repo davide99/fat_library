@@ -50,10 +50,14 @@ typedef struct {
 } fat_file;
 
 typedef struct {
-	uint32_t cluster;
+  uint32_t cluster;
 } fat_dir;
 
-typedef fat_file fat_dir_chain;
+typedef struct {
+  uint8_t name[11];
+
+  fat_file next_entry;
+} fat_list_entry;
 
 struct m_fat {
   int (*mount)(fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
@@ -63,9 +67,10 @@ struct m_fat {
 
   void (*dir_get_root)(fat_dir *dir);
   int (*dir_change)(fat_drive *drive, fat_dir *dir, const char *dir_name);
-};
 
-void fat_list_dir(fat_drive *drive);
+  void (*list_make_empty_entry)(fat_list_entry *list_entry);
+  int (*list_get_next_entry_in_dir)(fat_drive *drive, fat_dir *current_dir, fat_list_entry *list_entry);
+};
 
 extern const struct m_fat fat;
 

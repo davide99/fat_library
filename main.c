@@ -44,7 +44,17 @@ int main() {
 		fclose(f);
 	}
 
-	fat_list_dir(&drive);
+	{
+		fat_dir dir;
+		fat.dir_get_root(&dir);
+
+		fat_list_entry entry;
+		fat.list_make_empty_entry(&entry);
+
+		while(fat.list_get_next_entry_in_dir(&drive, &dir, &entry))
+			printf("%.11s\n", entry.name);
+	}
+
 
 	return 0;
 

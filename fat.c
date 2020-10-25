@@ -3,6 +3,7 @@
 #include "fat_utils.h"
 #include <string.h>
 #include <stdio.h>
+#define FAT_ENTRY_CLUSTER_GUARD_VALUE (0xFFFFFFFFu)
 
 //Private functions
 static int get_partition_info(fat_drive *drive);
@@ -296,25 +297,33 @@ int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
 	return fat_file_open_in_dir(drive, &dir, buffer, file);
 }
 
-void fat_list_dir(fat_drive *drive) {
+void fat_list_make_empty_entry(fat_list_entry *list_entry) {
+	list_entry->next_entry.cluster = FAT_ENTRY_CLUSTER_GUARD_VALUE;
+}
+
+int fat_list_get_next_entry_in_dir(fat_drive *drive, fat_dir *current_dir, fat_list_entry *list_entry) {
 	struct fat_entry e;
 
-	fat_file f = {
-		.cluster=15,
-		.in_cluster_byte_offset=0,
-		.size_bytes=sizeof(struct fat_entry)
-	};
+	if (list_entry->next_entry.cluster==FAT_ENTRY_CLUSTER_GUARD_VALUE) {
+		list_entry->next_entry.cluster = current_dir->cluster;
+		list_entry->next_entry.in_cluster_byte_offset = 0;
+		list_entry->next_entry.size_bytes = sizeof(struct fat_entry);
+	}
 
-	fat_file_read(drive, &f, &e, FAT_BUFFER_SIZE);
+	if (list_entry->next_entry.cluster==FAT_ROOT_DIR_CLUSTER && drive->type==FAT16) {
+		drive->read_bytes((drive->root_dir.first_sector << drive->log_bytes_per_sector)
+							  + list_entry->next_entry.in_cluster_byte_offset, sizeof(struct fat_entry), &e);
+		list_entry->next_entry.in_cluster_byte_offset += 32;
+	} else {
+		fat_file_read(drive, &list_entry->next_entry, &e, FAT_BUFFER_SIZE);
+	}
 
-	printf("%.11s\n", e.name.whole);
-
-	for (int i = 0; i < 10; i++) {
-		f.size_bytes = 32;
-
-		fat_file_read(drive, &f, &e, FAT_BUFFER_SIZE);
-
-		printf("%.11s\n", e.name.whole);
+	if(e.name.whole[0]==0){
+		return 0;
+	} else{
+		memcpy(list_entry->name, e.name.whole, 11);
+		list_entry->next_entry.size_bytes = sizeof(struct fat_entry);
+		return 1;
 	}
 }
 
@@ -325,5 +334,8 @@ const struct m_fat fat = {
 	.file_read = fat_file_read,
 
 	.dir_get_root = fat_dir_get_root,
-	.dir_change = fat_dir_change
+	.dir_change = fat_dir_change,
+
+	.list_make_empty_entry = fat_list_make_empty_entry,
+	.list_get_next_entry_in_dir = fat_list_get_next_entry_in_dir
 };
