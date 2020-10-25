@@ -47,6 +47,7 @@ int main() {
 	{
 		fat_dir dir;
 		fat.dir_get_root(&dir);
+		//fat.dir_change(&drive, &dir, "subdir");
 
 		fat_list_entry entry;
 		fat.list_make_empty_entry(&entry);

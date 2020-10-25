@@ -1,7 +1,9 @@
 #include "fat.h"
 #include "fat_types.h"
 #include "fat_utils.h"
-#include <string.h>
+#include <stddef.h>
+
+#define FAT_ENTRY_NAME_LAST_ENTRY 0x00u
 
 #define FAT_LIST_ENTRY_CLUSTER_GUARD_VALUE (0xFFFFFFFFu)
 
@@ -293,34 +295,29 @@ int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
 	return fat_file_open_in_dir(drive, &dir, buffer, file);
 }
 
-inline void fat_list_make_empty_entry(fat_list_entry *list_entry) {
+void fat_list_make_empty_entry(fat_list_entry *list_entry) {
 	list_entry->next_entry.cluster = FAT_LIST_ENTRY_CLUSTER_GUARD_VALUE;
 }
 
 int fat_list_get_next_entry_in_dir(fat_drive *drive, fat_dir *current_dir, fat_list_entry *list_entry) {
-	struct fat_entry e;
-
 	if (list_entry->next_entry.cluster==FAT_LIST_ENTRY_CLUSTER_GUARD_VALUE) {
 		list_entry->next_entry.cluster = current_dir->cluster;
-		list_entry->next_entry.in_cluster_byte_offset = 0;
-		list_entry->next_entry.size_bytes = sizeof(struct fat_entry);
+		list_entry->next_entry.in_cluster_byte_offset = offsetof(struct fat_entry, name);
+		list_entry->next_entry.size_bytes = sizeof(list_entry->name);
 	}
 
 	if (list_entry->next_entry.cluster==FAT_ROOT_DIR_CLUSTER && drive->type==FAT16) {
-		drive->read_bytes((drive->root_dir.first_sector_v16 << drive->log_bytes_per_sector)
-							  + list_entry->next_entry.in_cluster_byte_offset, sizeof(struct fat_entry), &e);
-		list_entry->next_entry.in_cluster_byte_offset += 32;
+		drive->read_bytes(
+			(drive->root_dir.first_sector_v16 << drive->log_bytes_per_sector)
+				+ list_entry->next_entry.in_cluster_byte_offset, sizeof(list_entry->name), list_entry->name);
 	} else {
-		fat_file_read(drive, &list_entry->next_entry, &e, FAT_INTERNAL_BUFFER_SIZE);
+		fat_file_read(drive, &list_entry->next_entry, list_entry->name, sizeof(list_entry->name));
+		list_entry->next_entry.in_cluster_byte_offset -= sizeof(list_entry->name);
+		list_entry->next_entry.size_bytes = sizeof(list_entry->name);
 	}
+	list_entry->next_entry.in_cluster_byte_offset += sizeof(struct fat_entry);
 
-	if (e.name.whole[0]==0) {
-		return 0;
-	} else {
-		memcpy(list_entry->name, e.name.whole, 11);
-		list_entry->next_entry.size_bytes = sizeof(struct fat_entry);
-		return 1;
-	}
+	return (list_entry->name[0]!=FAT_ENTRY_NAME_LAST_ENTRY);
 }
 
 const struct m_fat fat = {
