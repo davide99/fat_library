@@ -35,6 +35,12 @@ struct fat_time {
 	  hours: 5;
 } __attribute__((packed));
 
+#define FAT_ENTRY_WHOLE_NAME_SIZE 11
+
+#define FAT_ENTRY_NAME_LAST_ENTRY 0x00u
+#define FAT_ENTRY_NAME_DELETED_ENTRY 0xE5u
+#define FAT_ENTRY_NAME_KANJI_ENTRY 0x05u
+
 struct fat_entry {
   union {
 	struct {

@@ -3,10 +3,6 @@
 #include "fat_utils.h"
 #include <stddef.h>
 
-#define FAT_ENTRY_WHOLE_NAME_SIZE 11
-
-#define FAT_ENTRY_NAME_LAST_ENTRY 0x00u
-
 #define FAT_LIST_ENTRY_CLUSTER_GUARD_VALUE (0xFFFFFFFFu)
 
 //Private functions
@@ -222,25 +218,24 @@ int get_entry(fat_drive *drive, fat_dir dir, void *entry, int is_entry_dir, cons
 	while (1) {
 		fat_entry = drive->read_bytes(where, sizeof(struct fat_entry), drive->buffer);
 
-		if (fat_entry->attr!=ATTR_LONG_NAME && fat_entry->name.whole[0]!=0xE5) { //No LFN & deleted entries
-			if (fat_entry->name.whole[0]==FAT_ENTRY_NAME_LAST_ENTRY) {
-				goto not_found;
-			} else {
-				if (fat_entry->name.whole[0]==0x05u) //Kanji
-					fat_entry->name.whole[0] = 0xE5u;
+		switch (fat_entry->name.whole[0]) {
+			case FAT_ENTRY_NAME_LAST_ENTRY: goto not_found;
+			case FAT_ENTRY_NAME_DELETED_ENTRY: break;
+			case FAT_ENTRY_NAME_KANJI_ENTRY: fat_entry->name.whole[0] = FAT_ENTRY_NAME_DELETED_ENTRY;
+			default:
+				if (!fat_entry_ascii_name_equals(*fat_entry, entry_name))
+					break;
 
-				if (fat_entry_ascii_name_equals(*fat_entry, entry_name)) { //Found
-					if (is_entry_dir) {
-						((fat_dir *) entry)->cluster =
-							fat_make_dword(fat_entry->first_cluster_high, fat_entry->first_cluster_low);
-					} else {
-						((fat_file *) entry)->cluster =
-							fat_make_dword(fat_entry->first_cluster_high, fat_entry->first_cluster_low);
-						((fat_file *) entry)->size_bytes = fat_entry->file_size_bytes;
-					}
-					return 0;
+				//Found
+				if (is_entry_dir) {
+					((fat_dir *) entry)->cluster =
+						fat_make_dword(fat_entry->first_cluster_high, fat_entry->first_cluster_low);
+				} else {
+					((fat_file *) entry)->cluster =
+						fat_make_dword(fat_entry->first_cluster_high, fat_entry->first_cluster_low);
+					((fat_file *) entry)->size_bytes = fat_entry->file_size_bytes;
 				}
-			}
+				return 0;
 		}
 
 		//If we are parsing the root directory on FAT16 every entry is contiguous, or
@@ -315,6 +310,9 @@ int fat_list_get_next_entry_in_dir(fat_drive *drive, fat_dir *current_dir, fat_l
 		list_entry->next_entry.size_bytes = sizeof(list_entry->name);
 	}
 	list_entry->next_entry.in_cluster_byte_offset += sizeof(struct fat_entry);
+
+	if (list_entry->name[0]==FAT_ENTRY_NAME_KANJI_ENTRY)
+		list_entry->name[0] = FAT_ENTRY_NAME_DELETED_ENTRY;
 
 	return (list_entry->name[0]!=FAT_ENTRY_NAME_LAST_ENTRY);
 }
