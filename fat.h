@@ -28,8 +28,8 @@ typedef struct {
   uint32_t first_partition_sector; //AKA reserved region start, AKA lba begin in MBR
   uint32_t first_fat_sector;
   union {
-	uint32_t first_sector;
-	uint32_t first_cluster;
+	uint32_t first_sector_v16;
+	uint32_t first_cluster_v32;
   } root_dir;
   uint32_t first_data_sector;
 
