@@ -2,6 +2,7 @@
 #include "fat_types.h"
 #include "fat_utils.h"
 #include <string.h>
+#include <stdio.h>
 
 //Private functions
 static int get_partition_info(fat_drive *drive);
@@ -139,6 +140,11 @@ uint32_t fat_file_read(fat_drive *drive, fat_file *file, void *buffer, uint32_t 
 
 	//Do the data we read span more clusters?
 	for (read_clusters = 0; read_clusters < ceil_clusters_to_read && !is_eof(drive, file->cluster); read_clusters++) {
+		if (file->in_cluster_byte_offset==drive->cluster_size_bytes) { //Go to the next cluster?
+			file->cluster = find_next_cluster(drive, file->cluster);
+			file->in_cluster_byte_offset = 0;
+		}
+
 		read_size = drive->cluster_size_bytes - file->in_cluster_byte_offset; //Bytes till the end of the cluster
 		if (read_size > file->size_bytes)
 			read_size = file->size_bytes;
@@ -155,11 +161,6 @@ uint32_t fat_file_read(fat_drive *drive, fat_file *file, void *buffer, uint32_t 
 		file->size_bytes -= read_size; //Remaining file size
 		total_byte_read += read_size;
 		buffer_len -= read_size;
-
-		if (file->in_cluster_byte_offset==drive->cluster_size_bytes) { //Go to the next cluster?
-			file->cluster = find_next_cluster(drive, file->cluster);
-			file->in_cluster_byte_offset = 0;
-		}
 	}
 
 	return total_byte_read;
@@ -293,6 +294,28 @@ int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
 	}
 
 	return fat_file_open_in_dir(drive, &dir, buffer, file);
+}
+
+void fat_list_dir(fat_drive *drive) {
+	struct fat_entry e;
+
+	fat_file f = {
+		.cluster=15,
+		.in_cluster_byte_offset=0,
+		.size_bytes=sizeof(struct fat_entry)
+	};
+
+	fat_file_read(drive, &f, &e, FAT_BUFFER_SIZE);
+
+	printf("%.11s\n", e.name.whole);
+
+	for (int i = 0; i < 10; i++) {
+		f.size_bytes = 32;
+
+		fat_file_read(drive, &f, &e, FAT_BUFFER_SIZE);
+
+		printf("%.11s\n", e.name.whole);
+	}
 }
 
 const struct m_fat fat = {

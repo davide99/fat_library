@@ -44,6 +44,8 @@ int main() {
 		fclose(f);
 	}
 
+	fat_list_dir(&drive);
+
 	return 0;
 
 error:

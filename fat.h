@@ -53,6 +53,8 @@ typedef struct {
 	uint32_t cluster;
 } fat_dir;
 
+typedef fat_file fat_dir_chain;
+
 struct m_fat {
   int (*mount)(fat_drive *drive, uint32_t sector_size, fat_read_bytes_func_t read_bytes_func);
   int (*file_open)(fat_drive *drive, const char *path, fat_file *file);
@@ -62,6 +64,8 @@ struct m_fat {
   void (*dir_get_root)(fat_dir *dir);
   int (*dir_change)(fat_drive *drive, fat_dir *dir, const char *dir_name);
 };
+
+void fat_list_dir(fat_drive *drive);
 
 extern const struct m_fat fat;
 
