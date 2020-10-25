@@ -130,10 +130,8 @@ error:
 
 uint32_t fat_file_read(fat_drive *drive, fat_file *file, void *buffer, uint32_t buffer_len) {
 	uint8_t *byte_buffer = buffer;
-	uint32_t read_size, ceil_clusters_to_read, total_bytes_read, read_clusters;
+	uint32_t read_size, ceil_clusters_to_read, read_clusters;
 	uint64_t where;
-
-	total_bytes_read = 0; //Bytes that we actually read
 
 	//https://stackoverflow.com/a/2745086/6441490
 	ceil_clusters_to_read =
@@ -150,21 +148,20 @@ uint32_t fat_file_read(fat_drive *drive, fat_file *file, void *buffer, uint32_t 
 		if (read_size > file->size_bytes)
 			read_size = file->size_bytes;
 
-		where = (first_sector_of_cluster(drive, file->cluster) << drive->log_bytes_per_sector)
-			+ file->in_cluster_byte_offset;
-
 		if (read_size > buffer_len) //Do we have enough room in the buffer?
 			read_size = buffer_len;
+
+		where = (first_sector_of_cluster(drive, file->cluster) << drive->log_bytes_per_sector)
+			+ file->in_cluster_byte_offset;
 
 		drive->read_bytes(where, read_size, byte_buffer);
 		byte_buffer += read_size; //Move the buffer pointer forward
 		file->in_cluster_byte_offset += read_size;
 		file->size_bytes -= read_size; //Remaining file size
-		total_bytes_read += read_size;
 		buffer_len -= read_size;
 	}
 
-	return total_bytes_read;
+	return (uint32_t) (byte_buffer - (uint8_t *) buffer);
 }
 
 static inline uint32_t first_sector_of_cluster(fat_drive *drive, uint32_t cluster) {
@@ -226,7 +223,7 @@ int get_entry(fat_drive *drive, fat_dir dir, void *entry, int is_entry_dir, cons
 		fat_entry = drive->read_bytes(where, sizeof(struct fat_entry), drive->buffer);
 
 		if (fat_entry->attr!=ATTR_LONG_NAME && fat_entry->name.whole[0]!=0xE5) { //No LFN & deleted entries
-			if (fat_entry->name.whole[0]==0x00u) { //Reached last entry
+			if (fat_entry->name.whole[0]==FAT_ENTRY_NAME_LAST_ENTRY) {
 				goto not_found;
 			} else {
 				if (fat_entry->name.whole[0]==0x05u) //Kanji
