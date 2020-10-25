@@ -2,8 +2,8 @@
 #include "fat_types.h"
 #include "fat_utils.h"
 #include <string.h>
-#include <stdio.h>
-#define FAT_ENTRY_CLUSTER_GUARD_VALUE (0xFFFFFFFFu)
+
+#define FAT_LIST_ENTRY_CLUSTER_GUARD_VALUE (0xFFFFFFFFu)
 
 //Private functions
 static int get_partition_info(fat_drive *drive);
@@ -298,13 +298,13 @@ int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
 }
 
 void fat_list_make_empty_entry(fat_list_entry *list_entry) {
-	list_entry->next_entry.cluster = FAT_ENTRY_CLUSTER_GUARD_VALUE;
+	list_entry->next_entry.cluster = FAT_LIST_ENTRY_CLUSTER_GUARD_VALUE;
 }
 
 int fat_list_get_next_entry_in_dir(fat_drive *drive, fat_dir *current_dir, fat_list_entry *list_entry) {
 	struct fat_entry e;
 
-	if (list_entry->next_entry.cluster==FAT_ENTRY_CLUSTER_GUARD_VALUE) {
+	if (list_entry->next_entry.cluster==FAT_LIST_ENTRY_CLUSTER_GUARD_VALUE) {
 		list_entry->next_entry.cluster = current_dir->cluster;
 		list_entry->next_entry.in_cluster_byte_offset = 0;
 		list_entry->next_entry.size_bytes = sizeof(struct fat_entry);
@@ -315,7 +315,7 @@ int fat_list_get_next_entry_in_dir(fat_drive *drive, fat_dir *current_dir, fat_l
 							  + list_entry->next_entry.in_cluster_byte_offset, sizeof(struct fat_entry), &e);
 		list_entry->next_entry.in_cluster_byte_offset += 32;
 	} else {
-		fat_file_read(drive, &list_entry->next_entry, &e, FAT_BUFFER_SIZE);
+		fat_file_read(drive, &list_entry->next_entry, &e, FAT_INTERNAL_BUFFER_SIZE);
 	}
 
 	if (e.name.whole[0]==0) {

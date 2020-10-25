@@ -26,23 +26,25 @@ int fat_entry_ascii_name_equals(struct fat_entry entry, const char *name) {
 	uint8_t i, j;
 	char fat_name[sizeof(entry.name)];
 
-	if (name[0]=='.') { //A file can start with a . only if it's either "." o ".."
+	if (name[0]=='.') { //A file can start with a . only if it's either "." or ".."
 		if (name[1]=='.')
 			memcpy(fat_name, FAT_PARENT_DIR_NAME, sizeof(fat_name));
 		else
 			memcpy(fat_name, FAT_CURRENT_DIR_NAME, sizeof(fat_name));
 	} else {
+		//base
 		for (i = 0; name[i]!='.' && name[i]!='\0'; i++)
 			fat_name[i] = fat_ascii_to_upper(name[i]);
 
 		j = i; //j points at the next name char
-		if (name[j]=='.')
+		if (name[j]=='.') //did we stop for the '.'?
 			j++;
 
 		for (; i < (uint8_t) sizeof(entry.name.splitted.base); i++)
 			fat_name[i] = ' ';
 		//i point at the next fat_name char
 
+		//ext
 		for (; name[j]!='\0'; j++, i++)
 			fat_name[i] = fat_ascii_to_upper(name[j]);
 

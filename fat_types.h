@@ -12,9 +12,9 @@ struct fat_BPB {
   uint8_t number_of_fats;
   uint16_t root_entries_count;
   uint16_t total_sectors_16;
-  uint8_t unused1;        //media
+  uint8_t unused1; //media
   uint16_t fat_size_sectors_16;
-  uint8_t unused2[8];    //sizeof(uint16_t sectors_per_track + uint16_t number_of_heads + uint32_t hidden_sectors)
+  uint8_t unused2[8]; //sizeof(uint16_t sectors_per_track + uint16_t number_of_heads + uint32_t hidden_sectors)
   uint32_t total_sectors_32;
 } __attribute__((packed)); //25B
 
