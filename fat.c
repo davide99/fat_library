@@ -3,6 +3,8 @@
 #include "fat_utils.h"
 #include <stddef.h>
 
+#define FAT_ENTRY_WHOLE_NAME_SIZE 11
+
 #define FAT_ENTRY_NAME_LAST_ENTRY 0x00u
 
 #define FAT_LIST_ENTRY_CLUSTER_GUARD_VALUE (0xFFFFFFFFu)
@@ -279,9 +281,9 @@ int fat_file_open_in_dir(fat_drive *drive, fat_dir *dir, const char *filename, f
 }
 
 int fat_file_open(fat_drive *drive, const char *path, fat_file *file) {
-	char buffer[13];
 	int is_last;
 	fat_dir dir;
+	char buffer[FAT_ENTRY_WHOLE_NAME_SIZE + 2]; //plus '.' and '\0'
 
 	fat_dir_get_root(&dir);
 
@@ -322,6 +324,7 @@ int fat_list_get_next_entry_in_dir(fat_drive *drive, fat_dir *current_dir, fat_l
 
 const struct m_fat fat = {
 	.mount = fat_mount,
+
 	.file_open = fat_file_open,
 	.file_open_in_dir = fat_file_open_in_dir,
 	.file_read = fat_file_read,
